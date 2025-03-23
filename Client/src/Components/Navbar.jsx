@@ -4,7 +4,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import BlockchainService from '../services/BlockchainService';
 
-const API_URL = 'http://localhost:5000/api';
+const API_URL = 'https://skillblock.onrender.com/api';
 
 const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);

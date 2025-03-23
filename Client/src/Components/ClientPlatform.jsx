@@ -7,7 +7,7 @@ import {
 } from 'react-icons/fi';
 
 // API URLs
-const API_URL = 'http://localhost:5000/api';
+const API_URL = 'https://skillblock.onrender.com/api';
 
 function ClientPlatform() {
   // State for projects and UI

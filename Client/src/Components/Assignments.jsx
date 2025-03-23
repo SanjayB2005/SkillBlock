@@ -7,7 +7,7 @@ import {
 } from 'react-icons/fi';
 import { Link } from 'react-router-dom';
 
-const API_URL = 'http://localhost:5000/api';
+const API_URL = 'https://skillblock.onrender.com/api';
 
 function Assignments() {
   const [assignments, setAssignments] = useState([]);
