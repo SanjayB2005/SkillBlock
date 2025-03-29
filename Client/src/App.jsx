@@ -1,14 +1,14 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import Navbar from './Components/Navbar';
-import Footer from './Components/Footer';
-import Hero from './Components/Hero';
-import ClientDashboard from './Components/ClientDashboard';
-import FreelancerDashboard from './Components/FreelancerDashboard';
-import Profile from './Components/Profile';
-import WalletSignup from './Components/WalletSignup';
-import Assignments from './Components/Assignments'; // Add this import
-import NotFound from './Components/NotFound';
+import Navbar from './Components/layout/Navbar';
+import Footer from './Components/layout/Footer';
+import Hero from './Components/common/Hero';
+import ClientDashboard from './Components/client/dashboard/ClientDashboard';
+import FreelancerDashboard from './Components/freelancer/dashboard/FreelancerDashboard';
+import Profile from './Components/common/Profile';
+import WalletSignup from './Components/auth/WalletSignup';
+import Assignments from './Components/freelancer/assignments/Assignments'; // Add this import
+import NotFound from './Components/common/NotFound';
 
 // Route guard for authenticated routes
 const PrivateRoute = ({ element }) => {

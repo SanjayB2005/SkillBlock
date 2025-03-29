@@ -9,7 +9,7 @@ export const ConfirmationModal = ({
   message = "Are you sure you want to proceed?" 
 }) => {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-sm w-full">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-3">

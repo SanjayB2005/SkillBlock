@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Wallet, Zap, LogOut, ChevronDown } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import BlockchainService from '../services/BlockchainService';
+import BlockchainService from '../../services/BlockchainService';
 
 const API_URL = 'http://localhost:5000/api';
 

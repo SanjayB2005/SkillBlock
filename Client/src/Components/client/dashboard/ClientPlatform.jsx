@@ -8,13 +8,13 @@ import {
 } from 'react-icons/fi';
 
 // Import subcomponents
-import { StatCard } from './StatCard';
-import { ProjectModal } from './ProjectModal';
-import { ConfirmationModal } from './ConfirmationModal';
-import { ProjectDetailsModal } from './ProjectDetailsModal';
-import { ProjectCard } from './ProjectCard';
-import { EmptyState } from './EmptyState';
-import { Pagination } from './Pagination';
+import { StatCard } from '../../../Components/common/StatCard';
+import { ProjectModal } from '../../../Components/client/projects/ProjectModal';
+import { ConfirmationModal } from '../../../Components/client/model/ConfirmationModal';
+import { ProjectDetailsModal } from '../../../Components/client/projects/ProjectDetailsModal';
+import { ProjectCard } from '../../../Components/client/projects/ProjectCard';
+import { EmptyState } from '../../../Components/common/EmptyState';
+import { Pagination } from '../../../Components/common/Pagination';
 
 // API URLs
 const API_URL = 'http://localhost:5000/api';
@@ -88,7 +88,7 @@ function ClientPlatform() {
       currency: 'ETH',
       minimumFractionDigits: 3,
       maximumFractionDigits: 3
-    }).format(amount).replace('ETH', 'Ξ');
+    }).format(amount).replace('ETH', 'ETH');
   };
 
   const showNotification = (message, type) => {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { FiX, FiMessageSquare, FiEye, FiCheckCircle } from 'react-icons/fi';
-import { ProposalList } from './ProposalList';
+import { ProposalList } from '../../freelancer/projects/ProposalList';
 
 export const ProjectDetailsModal = ({ project, onClose, showNotification }) => {
   const [activeTab, setActiveTab] = useState('details');
@@ -13,7 +13,7 @@ export const ProjectDetailsModal = ({ project, onClose, showNotification }) => {
   };
   
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center p-6 border-b border-gray-700">
           <h3 className="text-xl font-semibold text-white">
