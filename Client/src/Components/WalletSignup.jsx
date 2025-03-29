@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Briefcase, User, Check } from 'lucide-react';
 
-const API_URL = 'https://skillblock.onrender.com/api';
+const API_URL = 'http://localhost:5000/api';
 
 const WalletSignup = () => {
   const location = useLocation();
@@ -51,7 +51,7 @@ const WalletSignup = () => {
         walletAddress,
         name,
         email,
-        role: userRole // Send user role to server
+        role: userRole
       });
       
       // Save token and user data

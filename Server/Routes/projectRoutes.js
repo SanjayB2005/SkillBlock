@@ -630,4 +630,51 @@ router.get('/admin/stats', authenticateUser, async (req, res) => {
   }
 });
 
+// Add this new route at the end of your projectRoutes.js file
+// Mark project as complete by freelancer (for freelancers)
+router.put('/:id/freelancer-complete', authenticateUser, async (req, res) => {
+  try {
+    // Find the project
+    const project = await Project.findById(req.params.id);
+    
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' });
+    }
+    
+    // Check if the user is the assigned freelancer
+    if (!project.hiredFreelancer || project.hiredFreelancer.toString() !== req.userId) {
+      return res.status(403).json({ message: 'You are not assigned to this project' });
+    }
+    
+    // Check if project is in progress
+    if (project.status !== 'in_progress') {
+      return res.status(400).json({ message: 'Only in-progress projects can be marked as completed' });
+    }
+    
+    // Update the project status to indicate freelancer has completed work
+    const updatedProject = await Project.findByIdAndUpdate(
+      req.params.id,
+      {
+        status: 'completed',
+        completedAt: Date.now(),
+        updatedAt: Date.now()
+      },
+      { new: true }
+    )
+    .populate('client', 'name email')
+    .populate('hiredFreelancer', 'name email');
+    
+    // Notify client that the project has been marked as complete by the freelancer
+    // This would typically involve creating a notification in a real app
+    
+    res.json({
+      message: 'Project marked as completed successfully',
+      project: updatedProject
+    });
+  } catch (error) {
+    console.error('Freelancer complete project error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 module.exports = router;

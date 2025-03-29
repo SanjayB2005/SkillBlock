@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { FiEye } from 'react-icons/fi';
 import { 
-  FiBriefcase, FiDollarSign, FiCalendar, FiClock, FiCheckCircle,
+  FiBriefcase, FiHexagon, FiCalendar, FiClock, FiCheckCircle,
   FiSearch, FiFilter, FiUser, FiSend, FiPlus, FiAlertCircle,
   FiCode, FiPenTool, FiTrendingUp, FiFileText, FiClipboard, FiUsers, 
   FiMoreHorizontal, FiArrowRight, FiStar, FiAward, FiThumbsUp, FiX
@@ -10,7 +10,7 @@ import {
 import { Link } from 'react-router-dom';
 
 // API URLs
-const API_URL = 'https://skillblock.onrender.com/api';
+const API_URL = 'http://localhost:5000/api';
 
 function FreelancerPlatform() {
 
@@ -215,9 +215,10 @@ const handleViewProposalDetails = (proposal) => {
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD',
-      maximumFractionDigits: 0
-    }).format(amount);
+      currency: 'ETH',
+      minimumFractionDigits: 3,
+      maximumFractionDigits: 3
+    }).format(amount).replace('ETH', 'Ξ');
   };
 
   // Show notification helper 
@@ -459,10 +460,10 @@ const handleViewProposalDetails = (proposal) => {
             <div className="text-gray-400 mb-4">{selectedProject.description}</div>
             
             <div className="flex flex-wrap items-center gap-4 text-sm">
-              <div className="flex items-center text-blue-400">
-                <FiDollarSign size={16} className="mr-1" />
-                <span>{formatCurrency(selectedProject.budget)}</span>
-              </div>
+            <div className="flex items-center text-blue-400 mr-4">
+              <FiHexagon size={16} className="mr-1" />
+              <span className="font-bold">{formatCurrency(assignment.budget || 0)}</span>
+            </div>
               
               {selectedProject.deadline && (
                 <div className="flex items-center text-amber-400">
@@ -490,7 +491,7 @@ const handleViewProposalDetails = (proposal) => {
           
           <form className="p-6 space-y-4" onSubmit={handleSubmitProposal}>
             <div>
-              <label htmlFor="bidAmount" className="block text-gray-400 mb-1">Your Bid Amount (USD)</label>
+              <label htmlFor="bidAmount" className="block text-gray-400 mb-1">Your Bid Amount (ETH)</label>
               <input 
                 id="bidAmount"
                 ref={bidAmountRef}
@@ -613,9 +614,9 @@ const handleViewProposalDetails = (proposal) => {
                 </div>
               </div>
               
-              <div className="flex items-center text-2xl font-bold text-blue-400">
-                <FiDollarSign size={20} className="mr-1" />
-                <span>{formatCurrency(proposalDetailsData.bidAmount)}</span>
+              <div className="flex items-center text-blue-400 mr-4">
+                <FiHexagon size={16} className="mr-1" />
+                <span className="font-bold">{formatCurrency(assignment.budget || 0)}</span>
               </div>
             </div>
             
@@ -760,7 +761,7 @@ const handleViewProposalDetails = (proposal) => {
               <p className="text-2xl font-bold text-white mt-1">{formatCurrency(stats.totalEarned)}</p>
             </div>
             <div className="bg-amber-500/20 p-2 rounded">
-              <FiDollarSign className="text-amber-500" />
+              <FiHexagon className="text-amber-500" />
             </div>
           </div>
         </div>
@@ -829,10 +830,10 @@ const handleViewProposalDetails = (proposal) => {
                   </div>
                   
                   <div className="flex items-center">
-                    <div className="flex items-center text-blue-400 mr-4">
-                      <FiDollarSign size={16} className="mr-1" />
-                      <span className="font-bold">{formatCurrency(project.budget)}</span>
-                    </div>
+                  <div className="flex items-center text-blue-400 mr-4">
+                    <FiHexagon size={16} className="mr-1" />
+                    <span className="font-bold">{formatCurrency(assignment.budget || 0)}</span>
+                  </div>
                     
                     {project.deadline && (
                       <div className="flex items-center text-amber-400">
@@ -968,7 +969,7 @@ const handleViewProposalDetails = (proposal) => {
                   </div>
                   
                   <div className="flex items-center text-blue-400">
-                    <FiDollarSign size={16} className="mr-1" />
+                    <FiHexagon size={16} className="mr-1" />
                     <span>{formatCurrency(proposal.bidAmount)}</span>
                   </div>
                 </div>

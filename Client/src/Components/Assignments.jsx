@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
-  FiBriefcase, FiDollarSign, FiCalendar, FiClock, FiCheckCircle,
+  FiBriefcase, FiHexagon, FiCalendar, FiClock, FiCheckCircle,
   FiMessageSquare, FiAlertCircle, FiUser, FiFileText, FiStar,
   FiArrowLeft, FiChevronRight, FiPaperclip, FiSend, FiEye, FiX
 } from 'react-icons/fi';
 import { Link } from 'react-router-dom';
 
-const API_URL = 'https://skillblock.onrender.com/api';
+const API_URL = 'http://localhost:5000/api';
 
 function Assignments() {
   const [assignments, setAssignments] = useState([]);
@@ -16,6 +16,7 @@ function Assignments() {
   const [notification, setNotification] = useState(null);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  const [completeInProgress, setCompleteInProgress] = useState(false);
 
   // Fetch assignments
   const fetchAssignments = async () => {
@@ -28,11 +29,25 @@ function Assignments() {
         throw new Error('Authentication required');
       }
       
+      // Changed the endpoint to ensure we get the correct data
       const response = await axios.get(`${API_URL}/projects/my-assignments`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      setAssignments(response.data.assignments || []);
+      // Extract assignments from the response, handling different possible structures
+      let assignmentsData = [];
+      if (Array.isArray(response.data)) {
+        assignmentsData = response.data;
+      } else if (response.data.assignments && Array.isArray(response.data.assignments)) {
+        assignmentsData = response.data.assignments;
+      } else if (response.data.projects && Array.isArray(response.data.projects)) {
+        assignmentsData = response.data.projects;
+      } else {
+        console.error('Unexpected response format:', response.data);
+        throw new Error('Unexpected response format from server');
+      }
+      
+      setAssignments(assignmentsData);
     } catch (err) {
       console.error('Error fetching assignments:', err);
       let errorMessage = 'Failed to load assignments. Please try again.';
@@ -51,6 +66,69 @@ function Assignments() {
     }
   };
 
+    // Handle marking a project as complete
+    // Handle marking a project as complete
+// Handle marking a project as complete
+// Handle marking a project as complete
+// Replace the existing handleMarkAsComplete function with this updated version
+
+const handleMarkAsComplete = async (assignment) => {
+  try {
+    setCompleteInProgress(true);
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+    
+    // First try the freelancer-specific endpoint
+    try {
+      await axios.put(`${API_URL}/projects/${assignment._id}/freelancer-complete`, 
+        { completedAt: new Date().toISOString() },
+        { headers: { Authorization: `Bearer ${token}` }}
+      );
+    } catch (firstError) {
+      // If freelancer-complete fails with 404, try the regular endpoint
+      if (firstError.response && firstError.response.status === 404) {
+        console.log("Fallback: Using regular project completion endpoint");
+        await axios.put(`${API_URL}/projects/${assignment._id}/complete`, 
+          { completedAt: new Date().toISOString() },
+          { headers: { Authorization: `Bearer ${token}` }}
+        );
+      } else {
+        throw firstError; // If it's a different error, rethrow it
+      }
+    }
+    
+    // Update local state after successful API call
+    setAssignments(prev => 
+      prev.map(a => a._id === assignment._id ? {...a, status: 'completed'} : a)
+    );
+    
+    // If modal is open, update selected assignment too
+    if (selectedAssignment && selectedAssignment._id === assignment._id) {
+      setSelectedAssignment({...selectedAssignment, status: 'completed'});
+    }
+    
+    showNotification('Project marked as complete!', 'success');
+  } catch (err) {
+    console.error('Error marking project as complete:', err);
+    
+    let errorMessage = 'Failed to mark project as complete';
+    
+    if (err.response) {
+      if (err.response.status === 403) {
+        errorMessage = 'You do not have permission to complete this project. Please contact support.';
+      } else if (err.response.data && err.response.data.message) {
+        errorMessage = err.response.data.message;
+      }
+    }
+    
+    showNotification(errorMessage, 'error');
+  } finally {
+    setCompleteInProgress(false);
+  }
+};
+
   // Load assignments on component mount
   useEffect(() => {
     fetchAssignments();
@@ -60,9 +138,10 @@ function Assignments() {
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD',
-      maximumFractionDigits: 0
-    }).format(amount);
+      currency: 'ETH',
+      minimumFractionDigits: 3,
+      maximumFractionDigits: 3
+    }).format(amount).replace('ETH', 'Ξ');
   };
 
   // Show notification
@@ -80,6 +159,9 @@ function Assignments() {
   // Assignment Details Modal
   const AssignmentDetailsModal = () => {
     if (!selectedAssignment) return null;
+    
+    // Check if project can be marked as complete
+    const canComplete = selectedAssignment.status !== 'completed';
     
     return (
       <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
@@ -102,8 +184,11 @@ function Assignments() {
               <div>
                 <h2 className="text-2xl font-bold text-white mb-2">{selectedAssignment.title}</h2>
                 <div className="flex items-center gap-2">
-                  <span className="px-2 py-1 rounded-full text-xs bg-green-900/60 text-green-300">
-                    IN PROGRESS
+                  <span className={`px-2 py-1 rounded-full text-xs 
+                    ${selectedAssignment.status === 'completed' 
+                      ? 'bg-blue-900/60 text-blue-300' 
+                      : 'bg-green-900/60 text-green-300'}`}>
+                    {selectedAssignment.status?.toUpperCase() || 'IN PROGRESS'}
                   </span>
                   <span className="text-gray-400 capitalize">
                     {selectedAssignment.category}
@@ -112,7 +197,7 @@ function Assignments() {
               </div>
               
               <div className="text-2xl font-bold text-blue-400">
-                {formatCurrency(selectedAssignment.budget)}
+                {formatCurrency(selectedAssignment.budget || 0)}
               </div>
             </div>
             
@@ -122,7 +207,7 @@ function Assignments() {
               <div>
                 <h4 className="text-lg font-medium text-white mb-2">Description</h4>
                 <div className="bg-gray-700/50 p-4 rounded-lg text-gray-300 whitespace-pre-wrap">
-                  {selectedAssignment.description}
+                  {selectedAssignment.description || 'No description provided'}
                 </div>
               </div>
               
@@ -145,7 +230,7 @@ function Assignments() {
                 <div className="bg-gray-700/50 p-4 rounded-lg">
                   <h5 className="text-gray-400 text-sm mb-1">Started On</h5>
                   <div className="text-white">
-                    {new Date(selectedAssignment.startDate || selectedAssignment.updatedAt).toLocaleDateString()}
+                    {new Date(selectedAssignment.startDate || selectedAssignment.updatedAt || Date.now()).toLocaleDateString()}
                   </div>
                 </div>
                 
@@ -161,21 +246,32 @@ function Assignments() {
                 <div className="bg-gray-700/50 p-4 rounded-lg">
                   <h5 className="text-gray-400 text-sm mb-1">Duration</h5>
                   <div className="text-white">
-                    {selectedAssignment.proposal?.estimatedDuration?.value} {selectedAssignment.proposal?.estimatedDuration?.unit}
+                    {selectedAssignment.proposal?.estimatedDuration?.value || '?'} {selectedAssignment.proposal?.estimatedDuration?.unit || 'days'}
                   </div>
                 </div>
               </div>
               
               {/* Skills */}
-              {selectedAssignment.skills?.length > 0 && (
+              {selectedAssignment.skills && (
                 <div>
                   <h4 className="text-lg font-medium text-white mb-2">Skills</h4>
                   <div className="flex flex-wrap gap-2">
-                    {selectedAssignment.skills.map((skill, i) => (
-                      <span key={i} className="px-3 py-1 bg-gray-700 text-gray-300 rounded-full">
-                        {skill}
-                      </span>
-                    ))}
+                    {typeof selectedAssignment.skills === 'string' ? 
+                      selectedAssignment.skills.split(',').map((skill, i) => (
+                        <span key={i} className="px-3 py-1 bg-gray-700 text-gray-300 rounded-full">
+                          {skill.trim()}
+                        </span>
+                      )) : 
+                      Array.isArray(selectedAssignment.skills) ? 
+                        selectedAssignment.skills.map((skill, i) => (
+                          <span key={i} className="px-3 py-1 bg-gray-700 text-gray-300 rounded-full">
+                            {typeof skill === 'string' ? skill.trim() : skill}
+                          </span>
+                        )) : 
+                        <span className="px-3 py-1 bg-gray-700 text-gray-300 rounded-full">
+                          No skills specified
+                        </span>
+                    }
                   </div>
                 </div>
               )}
@@ -186,13 +282,45 @@ function Assignments() {
                   <h4 className="text-lg font-medium text-white mb-2">Your Accepted Proposal</h4>
                   <div className="bg-gray-700/50 p-4 rounded-lg">
                     <div className="flex justify-between mb-2">
-                      <div className="text-blue-400 font-semibold">Your Bid: {formatCurrency(selectedAssignment.proposal.bidAmount)}</div>
+                      <div className="text-blue-400 font-semibold">Your Bid: {formatCurrency(selectedAssignment.proposal.bidAmount || 0)}</div>
                       <div className="bg-green-900/20 text-green-300 px-2 py-1 rounded-full text-xs">ACCEPTED</div>
                     </div>
                     <div className="text-gray-300 whitespace-pre-wrap mb-2">
-                      {selectedAssignment.proposal.coverLetter}
+                      {selectedAssignment.proposal.coverLetter || 'No cover letter provided'}
                     </div>
                   </div>
+                </div>
+              )}
+              
+              {/* Complete Project Button */}
+              {canComplete && (
+                <div className="flex justify-end mt-6">
+                  <button
+                    onClick={() => handleMarkAsComplete(selectedAssignment)}
+                    disabled={completeInProgress}
+                    className={`px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-md flex items-center
+                      ${completeInProgress ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    {completeInProgress ? (
+                      <>
+                        <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <FiCheckCircle className="mr-2" />
+                        Mark as Complete
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+              
+              {/* Completion Status */}
+              {selectedAssignment.status === 'completed' && (
+                <div className="bg-blue-900/20 text-blue-300 p-4 rounded-lg flex items-center">
+                  <FiCheckCircle className="mr-2" />
+                  <p>This project has been marked as complete.</p>
                 </div>
               )}
             </div>
@@ -203,7 +331,7 @@ function Assignments() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8 mt-32">
+    <div className="container mx-auto px-4 py-8">
       {/* Header with title */}
       <div className="flex items-center mb-6">
         <Link to="/freelancer-dashboard" className="text-blue-400 hover:text-blue-300 mr-4">
@@ -248,18 +376,29 @@ function Assignments() {
       {!loading && !error && assignments.length > 0 ? (
         <div className="space-y-6">
           {assignments.map(assignment => (
-            <div key={assignment._id} className="bg-gray-800 p-5 rounded-lg hover:bg-gray-800/90 transition-colors">
+            <div 
+              key={assignment._id} 
+              className={`bg-gray-800 p-5 rounded-lg hover:bg-gray-800/90 transition-colors
+                ${assignment.status === 'completed' ? 'border-l-4 border-blue-500' : ''}`}
+            >
               <div className="flex justify-between items-start flex-wrap gap-3">
                 <div>
-                  <h3 className="text-lg font-medium text-white mb-1">{assignment.title}</h3>
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="text-lg font-medium text-white">{assignment.title}</h3>
+                    {assignment.status === 'completed' && (
+                      <span className="bg-blue-900/40 text-blue-200 px-2 py-0.5 rounded-full text-xs">
+                        COMPLETED
+                      </span>
+                    )}
+                  </div>
                   <p className="text-gray-400 line-clamp-2">{assignment.description}</p>
                 </div>
                 
                 <div className="flex items-center">
-                  <div className="flex items-center text-blue-400 mr-4">
-                    <FiDollarSign size={16} className="mr-1" />
-                    <span className="font-bold">{formatCurrency(assignment.budget)}</span>
-                  </div>
+                <div className="flex items-center text-blue-400 mr-4">
+                  <FiHexagon size={16} className="mr-1" />
+                  <span className="font-bold">{formatCurrency(assignment.budget || 0)}</span>
+                </div>
                   
                   {assignment.deadline && (
                     <div className="flex items-center text-amber-400">
@@ -276,12 +415,24 @@ function Assignments() {
                   <span>Client: {assignment.client?.name || 'Anonymous'}</span>
                 </div>
                 
-                <button
-                  onClick={() => handleViewDetails(assignment)}
-                  className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white text-sm flex items-center"
-                >
-                  <FiEye className="mr-1" /> View Details
-                </button>
+                <div className="flex items-center space-x-3">
+                  {assignment.status !== 'completed' && (
+                    <button
+                      onClick={() => handleMarkAsComplete(assignment)}
+                      disabled={completeInProgress}
+                      className={`px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-white text-sm flex items-center
+                        ${completeInProgress ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <FiCheckCircle className="mr-1" /> Complete
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleViewDetails(assignment)}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm flex items-center"
+                  >
+                    <FiEye className="mr-1" /> Details
+                  </button>
+                </div>
               </div>
             </div>
           ))}
