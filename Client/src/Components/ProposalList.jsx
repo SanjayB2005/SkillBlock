@@ -232,7 +232,7 @@ export const ProposalList = ({ projectId, onAcceptProposal, showNotification }) 
               <div>
                 <p className="text-xs text-gray-500">Bid Amount</p>
                 <p className="text-white font-medium">
-                  ${parseFloat(proposal.bidAmount || 0).toLocaleString()}
+                  ETH {parseFloat(proposal.bidAmount || 0).toLocaleString()}
                 </p>
               </div>
             </div>

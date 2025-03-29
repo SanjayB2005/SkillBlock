@@ -76,6 +76,11 @@ function ClientPlatform() {
     { id: "other", label: "Other", icon: <FiBriefcase /> }
   ];
 
+  const handleCategoryChange = useCallback((categoryId) => {
+    setSelectedCategory(categoryId);
+    setPagination(prev => ({ ...prev, current: 1 })); // Reset to first page
+  }, []);
+
   // Utility functions
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {
@@ -106,9 +111,11 @@ function ClientPlatform() {
   };
 
   // Main fetch projects function
-  const fetchProjects = async (page = 1) => {
+  
+  const fetchProjects = useCallback(async (page = 1) => {
     try {
       setLoading(true);
+      setError(null);
       
       const token = localStorage.getItem('token');
       if (!token) {
@@ -119,29 +126,57 @@ function ClientPlatform() {
       queryParams.append('page', page);
       queryParams.append('limit', 10);
       
-      if (selectedCategory !== 'all') {
+      // Add category filter only if not "all"
+      if (selectedCategory && selectedCategory !== 'all') {
         queryParams.append('category', selectedCategory);
       }
       
-      if (searchTerm) {
-        queryParams.append('search', searchTerm);
+      // Add search term if present
+      if (searchTerm.trim()) {
+        queryParams.append('search', searchTerm.trim());
       }
       
-      const response = await axios.get(`${API_URL}/projects/my-projects?${queryParams.toString()}`, {
+      const response = await axios.get(`${API_URL}/projects/my-projects?${queryParams}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      setProjects(response.data.projects);
-      setPagination(response.data.pagination);
-      calculateStats(response.data.projects);
-      setError(null);
+      // Filter projects by category if needed
+      let filteredProjects = [];
+      if (response.data && Array.isArray(response.data.projects)) {
+        filteredProjects = selectedCategory === 'all' 
+          ? response.data.projects
+          : response.data.projects.filter(project => project.category === selectedCategory);
+          
+        setProjects(filteredProjects);
+        setPagination({
+          total: filteredProjects.length,
+          pages: Math.ceil(filteredProjects.length / 10),
+          current: page
+        });
+        calculateStats(filteredProjects);
+      } else {
+        throw new Error('Invalid response format');
+      }
+  
+      // Show empty state if no projects in category
+      if (filteredProjects.length === 0) {
+        setError(null);
+        setProjects([]);
+      }
+  
     } catch (err) {
       console.error('Error fetching projects:', err);
       setError(err.response?.data?.message || err.message || 'Failed to load projects');
+      setProjects([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedCategory, searchTerm]);
+  
+  // Also update the useEffect to trigger on category changes
+  useEffect(() => {
+    fetchProjects(1);
+  }, [fetchProjects, selectedCategory]); // Add selectedCategory as dependency
 
   // Handle project creation
   const handleCreateProject = async () => {
@@ -214,9 +249,13 @@ function ClientPlatform() {
   };
 
   // Initial and dependent effects
-  useEffect(() => {
-    fetchProjects();
-  }, [selectedCategory, searchTerm]);
+// Update the useEffect hook
+useEffect(() => {
+  // Reset pagination when filters change
+  setPagination(prev => ({ ...prev, current: 1 }));
+  // Fetch projects with current filters
+  fetchProjects(1);
+}, [fetchProjects]); // fetchProjects already has selectedCategory and searchTerm as dependencies
 
   // Main render
   return (
@@ -262,22 +301,22 @@ function ClientPlatform() {
       {/* Controls Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 space-y-4 md:space-y-0">
         {/* Category Filter */}
-        <div className="flex overflow-x-auto pb-2 space-x-2">
-          {categories.map(category => (
-            <button
-              key={category.id}
-              onClick={() => setSelectedCategory(category.id)}
-              className={`px-4 py-2 rounded-md flex items-center whitespace-nowrap ${
-                selectedCategory === category.id 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-              }`}
-            >
-              <span className="mr-2">{category.icon}</span>
-              {category.label}
-            </button>
-          ))}
-        </div>
+          <div className="flex overflow-x-auto pb-2 space-x-2">
+            {categories.map(category => (
+              <button
+                key={category.id}
+                onClick={() => handleCategoryChange(category.id)}
+                className={`px-4 py-2 rounded-md flex items-center whitespace-nowrap ${
+                  selectedCategory === category.id 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                }`}
+              >
+                <span className="mr-2">{category.icon}</span>
+                {category.label}
+              </button>
+            ))}
+          </div>
         
         <div className="flex w-full md:w-auto space-x-2">
           {/* Search Bar */}
@@ -328,12 +367,16 @@ function ClientPlatform() {
         <EmptyState 
           icon={<FiBriefcase className="mx-auto" />}
           title="No projects found"
-          message={selectedCategory !== 'all' || searchTerm 
-            ? "Try changing your filters or search term"
-            : "Create your first project to get started"
+          message={
+            selectedCategory !== 'all'
+              ? `No projects found in ${categories.find(c => c.id === selectedCategory)?.label || ''} category`
+              : searchTerm
+              ? "No projects match your search"
+              : "Create your first project to get started"
           }
           buttonText="Create Project"
           onButtonClick={() => setIsModalOpen(true)}
+          customClass="max-w-2xl mx-auto"
         />
       ) : (
         <div className="space-y-6">

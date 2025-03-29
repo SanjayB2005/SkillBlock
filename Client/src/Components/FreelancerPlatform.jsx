@@ -462,7 +462,7 @@ const handleViewProposalDetails = (proposal) => {
             <div className="flex flex-wrap items-center gap-4 text-sm">
             <div className="flex items-center text-blue-400 mr-4">
               <FiHexagon size={16} className="mr-1" />
-              <span className="font-bold">{formatCurrency(assignment.budget || 0)}</span>
+              <span className="font-bold">{formatCurrency(selectedProject?.budget || 0)}</span>
             </div>
               
               {selectedProject.deadline && (
@@ -500,7 +500,8 @@ const handleViewProposalDetails = (proposal) => {
                 defaultValue={newProposal.bidAmount}
                 className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
                 placeholder="e.g. 500"
-                min="1"
+                min="0"
+                step="any"
               />
               {selectedProject.budget && (
                 <p className="text-xs text-gray-400 mt-1">
@@ -616,7 +617,7 @@ const handleViewProposalDetails = (proposal) => {
               
               <div className="flex items-center text-blue-400 mr-4">
                 <FiHexagon size={16} className="mr-1" />
-                <span className="font-bold">{formatCurrency(assignment.budget || 0)}</span>
+                <span className="font-bold">{formatCurrency(proposalDetailsData?.bidAmount || 0)}</span>
               </div>
             </div>
             
@@ -832,7 +833,7 @@ const handleViewProposalDetails = (proposal) => {
                   <div className="flex items-center">
                   <div className="flex items-center text-blue-400 mr-4">
                     <FiHexagon size={16} className="mr-1" />
-                    <span className="font-bold">{formatCurrency(assignment.budget || 0)}</span>
+                    <span className="font-bold">{formatCurrency(project?.budget || 0)}</span>
                   </div>
                     
                     {project.deadline && (
