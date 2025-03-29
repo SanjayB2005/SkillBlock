@@ -69,7 +69,7 @@ export const ProjectDetailsModal = ({ project, onClose, showNotification }) => {
                 </div>
                 <div>
                   <h4 className="text-gray-400 text-sm mb-1">Budget</h4>
-                  <p className="text-white">${parseFloat(project.budget).toLocaleString()}</p>
+                  <p className="text-white">ETH {parseFloat(project.budget).toLocaleString()}</p>
                 </div>
                 <div>
                   <h4 className="text-gray-400 text-sm mb-1">Deadline</h4>

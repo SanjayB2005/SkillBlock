@@ -1,19 +1,89 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { 
   ArrowRight, Shield, Zap, Users, 
   Globe, Database, Code 
 } from 'lucide-react';
 
 const Hero = () => {
-  // Example: Retrieve user role from local storage
-  const userRole = localStorage.getItem('userRole'); // Replace with your actual logic
+  const [isWalletConnected, setIsWalletConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const navigate = useNavigate();
+  const userRole = localStorage.getItem('userRole');
+
+  useEffect(() => {
+    checkWalletConnection();
+    if (window.ethereum) {
+      window.ethereum.on('accountsChanged', handleAccountsChanged);
+      window.ethereum.on('disconnect', handleDisconnect);
+    }
+    return () => {
+      if (window.ethereum) {
+        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+        window.ethereum.removeListener('disconnect', handleDisconnect);
+      }
+    };
+  }, []);
+
+  const handleAccountsChanged = (accounts) => {
+    setIsWalletConnected(accounts.length > 0);
+    if (accounts.length > 0) {
+      localStorage.setItem('walletAddress', accounts[0]);
+    } else {
+      localStorage.removeItem('walletAddress');
+    }
+  };
+
+  const handleDisconnect = () => {
+    setIsWalletConnected(false);
+    localStorage.removeItem('walletAddress');
+  };
+
+  const checkWalletConnection = async () => {
+    try {
+      if (window.ethereum) {
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+        setIsWalletConnected(accounts.length > 0);
+        if (accounts.length > 0) {
+          localStorage.setItem('walletAddress', accounts[0]);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking wallet connection:', error);
+      setIsWalletConnected(false);
+    }
+  };
+
+  const connectWallet = async () => {
+    if (!window.ethereum) {
+      alert("Please install MetaMask to continue!");
+      window.open('https://metamask.io/download/', '_blank');
+      return;
+    }
+
+    try {
+      setIsConnecting(true);
+      const accounts = await window.ethereum.request({ 
+        method: 'eth_requestAccounts' 
+      });
+      
+      if (accounts.length > 0) {
+        setIsWalletConnected(true);
+        localStorage.setItem('walletAddress', accounts[0]);
+        navigate('/wallet-signup');
+      }
+    } catch (error) {
+      console.error('Error connecting wallet:', error);
+      alert('Failed to connect wallet. Please try again.');
+    } finally {
+      setIsConnecting(false);
+    }
+  };
 
   return (
     <div className="w-full">
       {/* Hero Section */}
       <div className="min-h-screen pt-24 relative overflow-hidden">
-        {/* Background gradient */}
         <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 via-purple-900/20 to-gray-900 z-0"></div>
         
         {/* Animated circles */}
@@ -26,7 +96,7 @@ const Hero = () => {
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-white leading-tight mb-6">
               <span className="inline-block">Decentralized Freelancing</span>
               <span className="block mt-2 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
-                Powered by Blockchain
+                Powered by SkillBlock
               </span>
             </h1>
             
@@ -35,19 +105,23 @@ const Hero = () => {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 mb-16">
-              <Link 
-                to={userRole === 'client' ? '/client-dashboard' : '/freelancer-dashboard'} 
-                className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg text-white font-semibold shadow-lg hover:shadow-blue-500/20 transition transform hover:scale-105"
-              >
-                Explore Marketplace
-              </Link>
-              
-              <Link 
-                to="/dashboard" 
-                className="px-8 py-4 bg-gray-800 border border-gray-700 rounded-lg text-white font-semibold shadow-lg hover:bg-gray-700 transition"
-              >
-                Go to Dashboard
-              </Link>
+              {isWalletConnected ? (
+                <Link 
+                  to={userRole === 'client' ? '/client-dashboard' : '/freelancer-dashboard'} 
+                  className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg text-white font-semibold shadow-lg hover:shadow-blue-500/20 transition transform hover:scale-105"
+                >
+                  Explore Marketplace
+                </Link>
+              ) : (
+                <button
+                  onClick={connectWallet}
+                  disabled={isConnecting}
+                  className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg text-white font-semibold shadow-lg hover:shadow-blue-500/20 transition transform hover:scale-105 disabled:opacity-50"
+                >
+                  {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+                  {!isConnecting && <ArrowRight className="ml-2 inline" size={20} />}
+                </button>
+              )}
             </div>
             
             {/* Stats */}
@@ -83,7 +157,7 @@ const Hero = () => {
         <div className="container mx-auto px-6">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-              Why Choose SkillOrbit?
+              Why Choose SkillBlock?
             </h2>
             <p className="text-xl text-gray-400 max-w-3xl mx-auto">
               Our platform combines the best of freelancing with the security and transparency of blockchain technology.
@@ -160,24 +234,27 @@ const Hero = () => {
         </div>
       </div>
       
-      {/* CTA Section */}
-      <div className="py-20 bg-gradient-to-r from-blue-900/50 to-purple-900/50">
-        <div className="container mx-auto px-6 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">
-            Ready to Get Started?
-          </h2>
-          <p className="text-xl text-gray-300 mb-10 max-w-3xl mx-auto">
-            Join thousands of freelancers and clients already using SkillOrbit to connect, collaborate, and create.
-          </p>
-          <Link 
-            to="/wallet-signup" 
-            className="inline-flex items-center space-x-2 px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg text-white font-semibold shadow-lg hover:shadow-blue-500/20 transition transform hover:scale-105"
-          >
-            <span>Connect Your Wallet</span>
-            <ArrowRight size={20} />
-          </Link>
+      {/* CTA Section - Only show when wallet is not connected */}
+      {!isWalletConnected && (
+        <div className="py-20 bg-gradient-to-r from-blue-900/50 to-purple-900/50">
+          <div className="container mx-auto px-6 text-center">
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">
+              Ready to Get Started?
+            </h2>
+            <p className="text-xl text-gray-300 mb-10 max-w-3xl mx-auto">
+              Join thousands of freelancers and clients already using SkillBlock to connect, collaborate, and create.
+            </p>
+            <button 
+              onClick={connectWallet}
+              disabled={isConnecting}
+              className="inline-flex items-center space-x-2 px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg text-white font-semibold shadow-lg hover:shadow-blue-500/20 transition transform hover:scale-105 disabled:opacity-50"
+            >
+              <span>{isConnecting ? 'Connecting...' : 'Connect Your Wallet'}</span>
+              {!isConnecting && <ArrowRight size={20} />}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
       
       {/* Add custom CSS for animations */}
       <style jsx>{`

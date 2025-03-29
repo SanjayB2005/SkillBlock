@@ -218,7 +218,7 @@ const handleViewProposalDetails = (proposal) => {
       currency: 'ETH',
       minimumFractionDigits: 3,
       maximumFractionDigits: 3
-    }).format(amount).replace('ETH', 'Ξ');
+    }).format(amount).replace('ETH', 'ETH');
   };
 
   // Show notification helper 
@@ -832,7 +832,7 @@ const handleViewProposalDetails = (proposal) => {
                   
                   <div className="flex items-center">
                   <div className="flex items-center text-blue-400 mr-4">
-                    <FiHexagon size={16} className="mr-1" />
+                    
                     <span className="font-bold">{formatCurrency(project?.budget || 0)}</span>
                   </div>
                     
@@ -970,7 +970,7 @@ const handleViewProposalDetails = (proposal) => {
                   </div>
                   
                   <div className="flex items-center text-blue-400">
-                    <FiHexagon size={16} className="mr-1" />
+                    
                     <span>{formatCurrency(proposal.bidAmount)}</span>
                   </div>
                 </div>

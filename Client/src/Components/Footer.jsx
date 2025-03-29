@@ -2,19 +2,19 @@ import React from 'react';
 
 const Footer = () => {
   return (
-    <footer className="bg-gradient-to-br from-black to-blue-950 text-white overflow-hidden">
+    <footer className="bg-gradient-to-br from-black to-blue-950 text-white">
       {/* Main Footer Content */}
       <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          
-          {/* First Segment - About */}
-          <div className="space-y-4">
-            <h3 className="text-xl font-bold text-blue-300">FreelanceChain</h3>
-            <p className="text-gray-300 text-sm">
+        <div className="flex justify-center">
+          {/* Company Info Section */}
+          <div className="max-w-md text-center">
+            <h3 className="text-xl font-bold text-blue-300 mb-4">SkillBlock</h3>
+            <p className="text-gray-300 text-sm mb-6">
               The premier platform connecting skilled freelancers with clients through 
               blockchain-secured contracts and decentralized learning opportunities.
             </p>
-            <div className="flex space-x-4 mt-4">
+            {/* Social Links */}
+            <div className="flex justify-center space-x-6">
               <a href="#" className="text-blue-400 hover:text-blue-200 transition duration-300">
                 <span className="sr-only">Twitter</span>
                 <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24">
@@ -35,59 +35,20 @@ const Footer = () => {
               </a>
             </div>
           </div>
-          
-          {/* Second Segment - Quick Links */}
-          <div className="space-y-4">
-            <h3 className="text-xl font-bold text-blue-300">Quick Links</h3>
-            <ul className="space-y-2">
-              <li><a href="#" className="text-gray-300 hover:text-blue-300 transition duration-300">Find Freelancers</a></li>
-              <li><a href="#" className="text-gray-300 hover:text-blue-300 transition duration-300">Post a Project</a></li>
-              <li><a href="#" className="text-gray-300 hover:text-blue-300 transition duration-300">Skill Marketplace</a></li>
-              <li><a href="#" className="text-gray-300 hover:text-blue-300 transition duration-300">Learning Hub</a></li>
-              <li><a href="#" className="text-gray-300 hover:text-blue-300 transition duration-300">Community Forum</a></li>
-              <li><a href="#" className="text-gray-300 hover:text-blue-300 transition duration-300">Blockchain Security</a></li>
-            </ul>
-          </div>
-          
-          {/* Third Segment - Newsletter */}
-          <div className="space-y-4">
-            <h3 className="text-xl font-bold text-blue-300">Stay Updated</h3>
-            <p className="text-gray-300 text-sm">
-              Subscribe to our newsletter for the latest updates, features, and opportunities.
-            </p>
-            <form className="mt-4">
-              <div className="flex flex-col sm:flex-row gap-2">
-                <input
-                  type="email"
-                  className="px-4 py-2 bg-blue-950 border border-blue-800 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 flex-grow"
-                  placeholder="Your email address"
-                />
-                <button
-                  type="submit"
-                  className="bg-cyan-400 text-black font-bold px-4 py-2 rounded-lg hover:bg-cyan-300 transform hover:scale-105 transition duration-300 shadow-lg"
-                >
-                  Join Now
-                </button>
-              </div>
-            </form>
-            <p className="text-xs text-gray-400 mt-2">
-              We respect your privacy. Unsubscribe at any time.
-            </p>
-          </div>
         </div>
       </div>
 
       {/* Bottom Copyright Bar */}
-      <div className="border-t border-blue-900 py-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center">
-          <p className="text-sm text-blue-400">
-            &copy; {new Date().getFullYear()} FreelanceChain. All rights reserved.
-          </p>
-          <div className="mt-4 sm:mt-0">
+      <div className="border-t border-blue-900">
+        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col sm:flex-row justify-between items-center space-y-4 sm:space-y-0">
+            <p className="text-sm text-blue-400">
+              &copy; {new Date().getFullYear()} SkillBlock. All rights reserved.
+            </p>
             <ul className="flex space-x-6">
-              <li><a href="#" className="text-xs text-blue-400 hover:text-blue-200">Privacy Policy</a></li>
-              <li><a href="#" className="text-xs text-blue-400 hover:text-blue-200">Terms of Service</a></li>
-              <li><a href="#" className="text-xs text-blue-400 hover:text-blue-200">Cookie Policy</a></li>
+              <li><a href="#" className="text-xs text-blue-400 hover:text-blue-200 transition-colors">Privacy Policy</a></li>
+              <li><a href="#" className="text-xs text-blue-400 hover:text-blue-200 transition-colors">Terms of Service</a></li>
+              <li><a href="#" className="text-xs text-blue-400 hover:text-blue-200 transition-colors">Cookie Policy</a></li>
             </ul>
           </div>
         </div>
@@ -96,5 +57,4 @@ const Footer = () => {
   );
 };
 
-// Add this default export line - this is what was missing
 export default Footer;
