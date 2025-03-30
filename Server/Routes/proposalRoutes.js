@@ -3,22 +3,7 @@ const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const { Proposal, Project, User } = require('../models/model');
 
-
-// Get all proposals
-router.get('/', authenticateUser, async (req, res) => {
-  try {
-    const proposals = await Proposal.find()
-      .populate('freelancer', 'name email')
-      .populate('project', 'title');
-    res.json(proposals);
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Other proposal routes...
-
-// Auth middleware for protected routes
+// Auth middleware for protected routes - Move this to the top
 const authenticateUser = (req, res, next) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
@@ -37,6 +22,19 @@ const authenticateUser = (req, res, next) => {
   }
 };
 
+// Get all proposals - Now middleware is defined before use
+router.get('/', authenticateUser, async (req, res) => {
+  try {
+    const proposals = await Proposal.find()
+      .populate('freelancer', 'name email')
+      .populate('project', 'title');
+    res.json(proposals);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ...rest of your existing routes...
 
 
 // Create a new proposal
