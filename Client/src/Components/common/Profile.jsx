@@ -2,15 +2,13 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { User, Edit, Save, Copy, Check, Mail, Wallet, Calendar, Briefcase, Award, Shield, AlertCircle } from 'lucide-react';
 
-// Fix the API URL - removing the /users from the base URL
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const API_URL = import.meta.env.API_URL ||'http://localhost:5000/api/users';
 
 const Profile = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
-  const [serverStatus, setServerStatus] = useState('idle');
 
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({
@@ -20,23 +18,6 @@ const Profile = () => {
     skills: [],
     role: 'client'
   });
-
-  // Add API connection check
-  useEffect(() => {
-    const checkApiConnection = async () => {
-      try {
-        setServerStatus('connecting');
-        const response = await axios.get(`${API_URL}/cors-test`);
-        console.log('API connection test:', response.data);
-        setServerStatus('connected');
-      } catch (error) {
-        console.error('API connection test failed:', error);
-        setServerStatus('error');
-      }
-    };
-    
-    checkApiConnection();
-  }, []);
 
   // Fetch user data with improved error handling
   useEffect(() => {
@@ -51,63 +32,9 @@ const Profile = () => {
           return;
         }
 
-        // Fix 1: Parse the token to check if it has a valid format
-        try {
-          const tokenParts = token.split('.');
-          if (tokenParts.length !== 3) {
-            throw new Error('Invalid token format');
-          }
-
-          // Try to decode payload to check contents
-          const payload = JSON.parse(atob(tokenParts[1]));
-          console.log('Token payload:', payload);
-          
-          // Check if userId exists in token
-          if (!payload.userId) {
-            console.warn('Token missing userId. Will attempt to use alternative authentication.');
-            // No userId in token, let's try a workaround
-          }
-        } catch (tokenError) {
-          console.error('Token parsing error:', tokenError);
-          // Continue anyway - server will validate
-        }
-
-        // Fix 2: Try to use a more robust authentication approach
-        const walletAddress = localStorage.getItem('walletAddress');
-        let headers = { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        };
-        
-        // Add wallet address as a backup identifier if available
-        if (walletAddress) {
-          console.log('Adding wallet address to headers for additional identification');
-          headers['X-Wallet-Address'] = walletAddress;
-        }
-        
-        // Fix 3: First try to authenticate via wallet if we have one
-        // This is a fallback in case the token is invalid
-        if (walletAddress && serverStatus !== 'error') {
-          try {
-            console.log('Attempting wallet authentication as fallback...');
-            const authResponse = await axios.post(`${API_URL}/users/wallet-auth`, {
-              walletAddress
-            });
-            
-            if (authResponse.data.token) {
-              console.log('Wallet authentication successful, updating token');
-              localStorage.setItem('token', authResponse.data.token);
-              headers.Authorization = `Bearer ${authResponse.data.token}`;
-            }
-          } catch (walletAuthError) {
-            console.error('Wallet authentication fallback failed:', walletAuthError);
-            // Continue with original token
-          }
-        }
-
-        // Fix 4: Now try to get the profile with our best token
-        console.log('Requesting profile with headers:', headers);
-        const response = await axios.get(`${API_URL}/users/profile`, { headers });
+        const response = await axios.get(`${API_URL}/profile`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
 
         console.log('Profile response:', response.data);
 
@@ -133,47 +60,20 @@ const Profile = () => {
         if (error.response) {
           // The request was made and the server responded with a status code
           console.error('Server response:', error.response.data);
-          console.error('Status code:', error.response.status);
 
           if (error.response.status === 401) {
             setError('Your session has expired. Please log in again.');
-            
-            // Try to re-authenticate if we have wallet address
-            const walletAddress = localStorage.getItem('walletAddress');
-            if (walletAddress) {
-              setError('Attempting to restore your session...');
-              
-              try {
-                const authResponse = await axios.post(`${API_URL}/users/wallet-auth`, {
-                  walletAddress
-                });
-                
-                if (authResponse.data.token) {
-                  localStorage.setItem('token', authResponse.data.token);
-                  setError('Session restored! Reloading profile...');
-                  setTimeout(() => window.location.reload(), 1500);
-                  return;
-                }
-              } catch (retryError) {
-                setError('Could not restore your session. Please log in again.');
-                localStorage.removeItem('token');
-              }
-            } else {
-              // No way to restore session
-              localStorage.removeItem('token');
-            }
-          } else if (error.response.status === 400 && error.response.data?.message === 'Invalid user ID') {
-            setError('Your login session appears to be corrupt. Please try logging out and back in again.');
-            
-            // Provide a logout button in the UI
+            // Optionally redirect to login page
+            // localStorage.removeItem('token');
+            // window.location.href = '/login';
           } else if (error.response.status === 404) {
-            setError(`User profile not found. The API endpoint ${API_URL}/users/profile may not exist. Please check your server configuration.`);
+            setError('User profile not found. Please complete your registration.');
           } else {
-            setError(`Error ${error.response.status}: ${error.response.data?.message || 'Server error'}`);
+            setError(`Error ${error.response.status}: ${error.response.data.message || 'Server error'}`);
           }
         } else if (error.request) {
           // The request was made but no response was received
-          setError(`No response from server at ${API_URL}. Please check your connection.`);
+          setError('No response from server. Please check your connection.');
         } else {
           // Something happened in setting up the request
           setError(`Request error: ${error.message}`);
@@ -184,7 +84,7 @@ const Profile = () => {
     };
 
     fetchUserProfile();
-  }, [serverStatus]);
+  }, []);
 
   // Copy wallet address to clipboard
   const copyToClipboard = () => {
@@ -249,8 +149,8 @@ const Profile = () => {
       // Check if role has changed before making the API call
       const roleChanged = user.role !== formData.role;
 
-      // Fix the API endpoint to include /users
-      const response = await axios.put(`${API_URL}/users/profile`, formData, {
+      // Update the user profile in the database
+      const response = await axios.put(`${API_URL}/profile`, formData, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -310,10 +210,10 @@ const Profile = () => {
           // Validation errors
           setError(`Update failed: ${error.response.data.message}`);
         } else {
-          setError(`Error ${error.response.status}: ${error.response.data?.message || 'Server error'}`);
+          setError(`Error ${error.response.status}: ${error.response.data.message || 'Server error'}`);
         }
       } else if (error.request) {
-        setError(`No response from server at ${API_URL}. Please check your connection.`);
+        setError('No response from server. Please check your connection.');
       } else {
         setError(`Request error: ${error.message}`);
       }
@@ -321,7 +221,6 @@ const Profile = () => {
       setLoading(false);
     }
   };
-  
   // Loading state
   if (loading) {
     return (
@@ -342,28 +241,12 @@ const Profile = () => {
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <div className="text-xl text-white font-semibold mb-2">Error</div>
           <div className="text-red-300">{error}</div>
-          
-          {/* Show API connection status */}
-          {serverStatus === 'error' && (
-            <div className="mt-3 p-2 bg-red-800/50 text-red-300 text-sm rounded">
-              API connection issue. Endpoint: {API_URL}
-            </div>
-          )}
-          
-          <div className="mt-6 flex justify-center space-x-4">
-            <button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white"
-            >
-              Retry
-            </button>
-            <button
-              onClick={() => window.location.href = '/'}
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white"
-            >
-              Return Home
-            </button>
-          </div>
+          <button
+            onClick={() => window.location.href = '/'}
+            className="mt-6 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white"
+          >
+            Return to Home
+          </button>
         </div>
       </div>
     );
@@ -391,16 +274,6 @@ const Profile = () => {
   return (
     <div className="min-h-screen pt-24 pb-12">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        {/* API Status Indicator */}
-        {serverStatus === 'error' && (
-          <div className="mb-6 p-3 bg-red-900/50 border border-red-700 rounded-lg">
-            <p className="text-sm text-red-300 flex items-center">
-              <AlertCircle className="w-4 h-4 mr-1" />
-              API Connection Error: Cannot connect to {API_URL}
-            </p>
-          </div>
-        )}
-        
         <div className="bg-gray-800 rounded-xl overflow-hidden shadow-xl">
           {/* Profile Header */}
           <div className="bg-gradient-to-r from-blue-600 to-purple-600 h-32 md:h-48"></div>
