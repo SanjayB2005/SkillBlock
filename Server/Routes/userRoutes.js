@@ -212,16 +212,24 @@ router.post('/wallet-auth', async (req, res) => {
       return res.status(400).json({ message: 'Wallet address is required' });
     }
 
+    console.log('Wallet auth attempt for address:', walletAddress);
+
     // Check if user with wallet address exists
     const user = await User.findOne({ walletAddress });
     
     if (user) {
-      // User exists, create JWT token
+      console.log('User found for wallet address');
+      // User exists, create JWT token - INCLUDE ROLE
       const token = jwt.sign(
-        { userId: user._id },
+        { 
+          userId: user._id,
+          role: user.role  // Make sure role is included
+        },
         process.env.JWT_SECRET || 'your_jwt_secret',
-        { expiresIn: '1h' }
+        { expiresIn: '7d' }  // Extend token validity to 7 days
       );
+      
+      console.log('Generated token payload:', { userId: user._id, role: user.role });
       
       return res.json({
         exists: true,
@@ -236,6 +244,7 @@ router.post('/wallet-auth', async (req, res) => {
       });
     } else {
       // User doesn't exist
+      console.log('No user found for wallet address');
       return res.json({
         exists: false,
         message: 'Wallet not registered'
@@ -243,7 +252,7 @@ router.post('/wallet-auth', async (req, res) => {
     }
   } catch (error) {
     console.error('Wallet auth error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
@@ -252,23 +261,47 @@ router.post('/wallet-auth', async (req, res) => {
 
 router.get('/profile', async (req, res) => {
   try {
+    console.log('Profile request received');
     // Verify JWT token
     const token = req.headers.authorization?.split(' ')[1];
     
     if (!token) {
+      console.log('No token provided in request');
       return res.status(401).json({ message: 'No token provided' });
     }
     
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
+    console.log('Token received, attempting to decode');
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
+    } catch (tokenError) {
+      console.error('Token verification failed:', tokenError.message);
+      return res.status(401).json({ message: 'Invalid or expired token', error: tokenError.message });
+    }
+    
+    if (!decoded.userId) {
+      console.error('Token missing userId field:', decoded);
+      return res.status(400).json({ message: 'Token missing user ID field' });
+    }
+    
     const userId = decoded.userId;
+    console.log('Looking up user with ID:', userId);
+    
+    // Check if userId is a valid ObjectId
+    if (!userId.match(/^[0-9a-fA-F]{24}$/)) {
+      console.error('Invalid ObjectId format:', userId);
+      return res.status(400).json({ message: 'Invalid user ID format' });
+    }
     
     // Find user by ID
     const user = await User.findById(userId).select('-password');
     
     if (!user) {
+      console.log('User not found for ID:', userId);
       return res.status(404).json({ message: 'User not found' });
     }
     
+    console.log('User found, sending response');
     res.json({ user });
   } catch (error) {
     console.error('Profile error:', error);
@@ -277,8 +310,11 @@ router.get('/profile', async (req, res) => {
       return res.status(401).json({ message: 'Invalid or expired token' });
     }
     
-    // Add this line to complete the error handling
-    res.status(500).json({ message: 'Server error' });
+    if (error.kind === 'ObjectId') {
+      return res.status(400).json({ message: 'Invalid user ID format' });
+    }
+    
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 // Update user profile
@@ -382,6 +418,15 @@ router.get('/verify-token', (req, res) => {
 
 router.get('/test', (req, res) => {
   res.json({ success: true, message: 'User routes are working' });
+});
+
+router.get('/connection-test', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'Connection established successfully',
+    serverTime: new Date().toISOString(),
+    clientOrigin: req.headers.origin || 'unknown'
+  });
 });
 
 module.exports = router;

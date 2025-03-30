@@ -187,6 +187,27 @@ useEffect(() => {
     }
   };
 
+
+  const handleProfileResponse = (response) => {
+    console.log('Profile response:', response.data);
+    
+    if (response.data && response.data.user) {
+      setUser(response.data.user);
+      setFormData({
+        name: response.data.user.name || '',
+        email: response.data.user.email || '',
+        bio: response.data.user.bio || '',
+        skills: response.data.user.skills || [],
+        role: response.data.user.role || 'client'
+      });
+      setError(null);
+    } else {
+      setError('Invalid response format from server');
+    }
+    
+    setLoading(false);
+  };
+
   // Handle form input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -202,6 +223,41 @@ useEffect(() => {
 
       return updatedFormData;
     });
+  };
+
+  const testConnection = async () => {
+    try {
+      setError('Testing connection to server...');
+      
+      // First try the CORS test endpoint
+      const corsResponse = await axios.get(`${API_URL}/cors-test`, { timeout: 5000 });
+      console.log('CORS test succeeded:', corsResponse.data);
+      
+      // Then try the user routes connection test
+      const userResponse = await axios.get(`${API_URL}/users/connection-test`, { timeout: 5000 });
+      console.log('User routes connection test succeeded:', userResponse.data);
+      
+      // Then try the verify-token endpoint if we have a token
+      const token = localStorage.getItem('token');
+      if (token) {
+        const tokenResponse = await axios.get(`${API_URL}/users/verify-token`, {
+          headers: { Authorization: `Bearer ${token}` },
+          timeout: 5000
+        });
+        console.log('Token verification succeeded:', tokenResponse.data);
+        
+        if (tokenResponse.data.valid) {
+          setError(`Connection tests passed! Token is valid for user ID: ${tokenResponse.data.decoded.userId}`);
+        } else {
+          setError('Connection tests passed but token is invalid. Try logging out and back in.');
+        }
+      } else {
+        setError('Connection tests passed! But no authentication token found.');
+      }
+    } catch (error) {
+      console.error('Connection test failed:', error);
+      setError(`Connection test failed: ${error.message}. Check console for details.`);
+    }
   };
 
   // Handle skill changes
@@ -347,6 +403,14 @@ useEffect(() => {
           )}
           
           <div className="mt-6 flex flex-col sm:flex-row justify-center gap-4">
+            {/* Add a connection test button */}
+            <button
+              onClick={testConnection}
+              className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg text-white"
+            >
+              Test Connection
+            </button>
+            
             {/* Show appropriate button based on error type */}
             {error.includes('Network error') ? (
               <button
