@@ -6,6 +6,7 @@ const userRoutes = require('./Routes/userRoutes');
 const projectRoutes = require('./Routes/projectRoutes');
 const proposalRoutes = require('./Routes/proposalRoutes');
 const healthRoutes = require('./Routes/healthRoutes');
+const rootRoutes = require('./Routes/rootRoutes');
 
 // Load environment variables
 dotenv.config();
@@ -46,6 +47,7 @@ app.get('/api/status', (req, res) => {
 });
 
 // Mount API routes
+app.use('/', rootRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/proposals', proposalRoutes);
