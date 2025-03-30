@@ -95,7 +95,7 @@ export const ProjectModal = ({
                   value={newProject.budget}
                   onChange={handleInputChange}
                   min="0"
-                  step="50"
+                  step="any"
                   className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter your budget"
                   required
