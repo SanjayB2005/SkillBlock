@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Briefcase, User, Check } from 'lucide-react';
+import { Briefcase, User, Check, AlertCircle } from 'lucide-react';
 
-const API_URL = import.meta.env.VITE_API_URL ||'http://localhost:5000/api';
+// Use the correct environment variable or fallback
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const WalletSignup = () => {
   const location = useLocation();
@@ -15,6 +16,8 @@ const WalletSignup = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [step, setStep] = useState(1); // Step 1: Basic info, Step 2: Role selection
+  // Add missing serverStatus state
+  const [serverStatus, setServerStatus] = useState('idle'); // 'idle', 'connecting', 'connected', 'error'
 
   // Check if wallet address is available on component mount
   useEffect(() => {
@@ -26,11 +29,19 @@ const WalletSignup = () => {
   
       try {
         setServerStatus('connecting');
+        console.log(`Attempting to connect to: ${API_URL}/users/wallet-auth`);
+        
         const response = await axios.post(`${API_URL}/users/wallet-auth`, {
           walletAddress
-        }, { timeout: 5000 }); // Add timeout to prevent long waiting
+        }, { 
+          timeout: 10000, // Increase timeout for slower connections
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
   
         setServerStatus('connected');
+        console.log('Server connection successful:', response.data);
         
         if (response.data.exists) {
           // Wallet already registered, store token and redirect
@@ -48,7 +59,7 @@ const WalletSignup = () => {
         setServerStatus('error');
         
         if (error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED') {
-          setError('Cannot connect to server. Please check that the backend server is running and try again.');
+          setError(`Cannot connect to server at ${API_URL}. Please check that the backend server is running and try again.`);
         } else if (error.response?.data?.message) {
           setError(error.response.data.message);
         } else {
@@ -84,6 +95,9 @@ const WalletSignup = () => {
     setError('');
   
     try {
+      console.log(`Attempting to register wallet at: ${API_URL}/users/wallet-register`);
+      console.log('Registration payload:', { walletAddress, name, email, role: userRole });
+      
       const response = await axios.post(`${API_URL}/users/wallet-register`, {
         walletAddress,
         name,
@@ -92,7 +106,8 @@ const WalletSignup = () => {
       }, {
         headers: {
           'Content-Type': 'application/json'
-        }
+        },
+        timeout: 10000 // Increase timeout for registration
       });
       
       if (response.data.token) {
@@ -114,7 +129,7 @@ const WalletSignup = () => {
       let errorMessage = 'Registration failed. Please try again.';
       
       if (error.code === 'ERR_NETWORK') {
-        errorMessage = 'Cannot connect to server. Please try again later.';
+        errorMessage = `Cannot connect to server at ${API_URL}. Please try again later.`;
       } else if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
       }
@@ -128,6 +143,13 @@ const WalletSignup = () => {
   // Select role function
   const selectRole = (role) => {
     setUserRole(role);
+  };
+
+  // Retry connection to server
+  const retryConnection = () => {
+    setError('');
+    setServerStatus('connecting');
+    window.location.reload();
   };
 
   // If no wallet address is available, don't render the form
@@ -145,11 +167,59 @@ const WalletSignup = () => {
         <div className="mb-6 p-4 bg-gray-700 rounded-lg">
           <p className="text-gray-300 text-sm">Connected Wallet</p>
           <p className="text-white font-mono break-all">{walletAddress}</p>
+          
+          {/* Server status indicator */}
+          <div className="mt-2 flex items-center text-xs">
+            {serverStatus === 'idle' && (
+              <span className="flex items-center text-gray-400">
+                <span className="w-2 h-2 bg-gray-500 rounded-full mr-2"></span>
+                Waiting to connect...
+              </span>
+            )}
+            {serverStatus === 'connecting' && (
+              <span className="flex items-center text-yellow-400">
+                <span className="w-2 h-2 bg-yellow-500 rounded-full mr-2 animate-pulse"></span>
+                Connecting to server...
+              </span>
+            )}
+            {serverStatus === 'connected' && (
+              <span className="flex items-center text-green-400">
+                <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                Connected to server
+              </span>
+            )}
+            {serverStatus === 'error' && (
+              <span className="flex items-center text-red-400">
+                <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                Server connection error
+              </span>
+            )}
+          </div>
+          
+          <div className="mt-1 text-xs text-gray-400">
+            API: {API_URL}
+          </div>
         </div>
 
         {error && (
           <div className="mb-6 p-4 bg-red-900/50 border border-red-700 rounded-lg text-red-200">
-            {error}
+            <div className="flex items-start">
+              <AlertCircle className="mr-2 h-5 w-5 flex-shrink-0" />
+              <div>
+                <p className="font-medium">{error}</p>
+                
+                {serverStatus === 'error' && (
+                  <div className="mt-2 text-sm">
+                    <button 
+                      onClick={retryConnection}
+                      className="mt-2 bg-red-800 hover:bg-red-700 text-white py-1 px-3 rounded text-sm"
+                    >
+                      Retry Connection
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -168,6 +238,7 @@ const WalletSignup = () => {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
+                disabled={serverStatus === 'error'}
               />
             </div>
             
@@ -182,12 +253,14 @@ const WalletSignup = () => {
                 placeholder="Enter your email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                disabled={serverStatus === 'error'}
               />
             </div>
 
             <button
               type="submit"
-              className="w-full py-3 px-6 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 rounded-lg text-white font-medium transition-all transform hover:scale-105"
+              className="w-full py-3 px-6 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 rounded-lg text-white font-medium transition-all transform hover:scale-105 disabled:opacity-70 disabled:cursor-not-allowed"
+              disabled={serverStatus === 'error'}
             >
               Continue to Role Selection
             </button>
@@ -201,10 +274,10 @@ const WalletSignup = () => {
             
             <div className="grid grid-cols-2 gap-4">
               <div 
-                onClick={() => selectRole('freelancer')}
+                onClick={() => serverStatus !== 'error' && selectRole('freelancer')}
                 className={`cursor-pointer bg-gray-700 hover:bg-gray-600 transition-all p-6 rounded-lg border-2 ${
                   userRole === 'freelancer' ? 'border-blue-500 ring-2 ring-blue-500/50' : 'border-gray-600'
-                } text-center`}
+                } ${serverStatus === 'error' ? 'opacity-70 cursor-not-allowed' : ''} text-center`}
               >
                 <div className="bg-gradient-to-br from-blue-500 to-purple-500 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                   <User size={30} className="text-white" />
@@ -221,10 +294,10 @@ const WalletSignup = () => {
               </div>
               
               <div 
-                onClick={() => selectRole('client')}
+                onClick={() => serverStatus !== 'error' && selectRole('client')}
                 className={`cursor-pointer bg-gray-700 hover:bg-gray-600 transition-all p-6 rounded-lg border-2 ${
                   userRole === 'client' ? 'border-blue-500 ring-2 ring-blue-500/50' : 'border-gray-600'
-                } text-center`}
+                } ${serverStatus === 'error' ? 'opacity-70 cursor-not-allowed' : ''} text-center`}
               >
                 <div className="bg-gradient-to-br from-blue-500 to-purple-500 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Briefcase size={30} className="text-white" />
@@ -244,7 +317,7 @@ const WalletSignup = () => {
             <div className="pt-4">
               <button
                 onClick={handleSubmit}
-                disabled={isLoading || !userRole}
+                disabled={isLoading || !userRole || serverStatus === 'error'}
                 className="w-full py-3 px-6 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 rounded-lg text-white font-medium transition-all transform hover:scale-105 disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 {isLoading ? 'Creating Account...' : 'Complete Sign Up'}
@@ -253,6 +326,7 @@ const WalletSignup = () => {
               <button
                 onClick={() => setStep(1)}
                 className="w-full mt-3 py-2 px-4 bg-transparent border border-gray-600 hover:border-gray-500 rounded-lg text-gray-400 hover:text-gray-300 font-medium transition-all"
+                disabled={serverStatus === 'error'}
               >
                 Back to Profile Info
               </button>
