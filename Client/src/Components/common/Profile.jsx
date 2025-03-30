@@ -51,10 +51,63 @@ const Profile = () => {
           return;
         }
 
-        // Fix the API endpoint to include /users
-        const response = await axios.get(`${API_URL}/users/profile`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        // Fix 1: Parse the token to check if it has a valid format
+        try {
+          const tokenParts = token.split('.');
+          if (tokenParts.length !== 3) {
+            throw new Error('Invalid token format');
+          }
+
+          // Try to decode payload to check contents
+          const payload = JSON.parse(atob(tokenParts[1]));
+          console.log('Token payload:', payload);
+          
+          // Check if userId exists in token
+          if (!payload.userId) {
+            console.warn('Token missing userId. Will attempt to use alternative authentication.');
+            // No userId in token, let's try a workaround
+          }
+        } catch (tokenError) {
+          console.error('Token parsing error:', tokenError);
+          // Continue anyway - server will validate
+        }
+
+        // Fix 2: Try to use a more robust authentication approach
+        const walletAddress = localStorage.getItem('walletAddress');
+        let headers = { 
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        };
+        
+        // Add wallet address as a backup identifier if available
+        if (walletAddress) {
+          console.log('Adding wallet address to headers for additional identification');
+          headers['X-Wallet-Address'] = walletAddress;
+        }
+        
+        // Fix 3: First try to authenticate via wallet if we have one
+        // This is a fallback in case the token is invalid
+        if (walletAddress && serverStatus !== 'error') {
+          try {
+            console.log('Attempting wallet authentication as fallback...');
+            const authResponse = await axios.post(`${API_URL}/users/wallet-auth`, {
+              walletAddress
+            });
+            
+            if (authResponse.data.token) {
+              console.log('Wallet authentication successful, updating token');
+              localStorage.setItem('token', authResponse.data.token);
+              headers.Authorization = `Bearer ${authResponse.data.token}`;
+            }
+          } catch (walletAuthError) {
+            console.error('Wallet authentication fallback failed:', walletAuthError);
+            // Continue with original token
+          }
+        }
+
+        // Fix 4: Now try to get the profile with our best token
+        console.log('Requesting profile with headers:', headers);
+        const response = await axios.get(`${API_URL}/users/profile`, { headers });
 
         console.log('Profile response:', response.data);
 
@@ -84,9 +137,35 @@ const Profile = () => {
 
           if (error.response.status === 401) {
             setError('Your session has expired. Please log in again.');
-            // Optionally redirect to login page
-            // localStorage.removeItem('token');
-            // window.location.href = '/login';
+            
+            // Try to re-authenticate if we have wallet address
+            const walletAddress = localStorage.getItem('walletAddress');
+            if (walletAddress) {
+              setError('Attempting to restore your session...');
+              
+              try {
+                const authResponse = await axios.post(`${API_URL}/users/wallet-auth`, {
+                  walletAddress
+                });
+                
+                if (authResponse.data.token) {
+                  localStorage.setItem('token', authResponse.data.token);
+                  setError('Session restored! Reloading profile...');
+                  setTimeout(() => window.location.reload(), 1500);
+                  return;
+                }
+              } catch (retryError) {
+                setError('Could not restore your session. Please log in again.');
+                localStorage.removeItem('token');
+              }
+            } else {
+              // No way to restore session
+              localStorage.removeItem('token');
+            }
+          } else if (error.response.status === 400 && error.response.data?.message === 'Invalid user ID') {
+            setError('Your login session appears to be corrupt. Please try logging out and back in again.');
+            
+            // Provide a logout button in the UI
           } else if (error.response.status === 404) {
             setError(`User profile not found. The API endpoint ${API_URL}/users/profile may not exist. Please check your server configuration.`);
           } else {
@@ -105,7 +184,7 @@ const Profile = () => {
     };
 
     fetchUserProfile();
-  }, []);
+  }, [serverStatus]);
 
   // Copy wallet address to clipboard
   const copyToClipboard = () => {
