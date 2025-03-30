@@ -32,7 +32,7 @@ const Profile = () => {
           return;
         }
 
-        const response = await axios.get(`${API_URL}/users/:id`, {
+        const response = await axios.get(`${API_URL}/profile`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -150,7 +150,7 @@ const Profile = () => {
       const roleChanged = user.role !== formData.role;
 
       // Update the user profile in the database
-      const response = await axios.put(`${API_URL}/users/:id`, formData, {
+      const response = await axios.put(`${API_URL}/profile`, formData, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
