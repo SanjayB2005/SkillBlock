@@ -20,24 +20,72 @@ const Profile = () => {
   });
 
   // Fetch user data with improved error handling
+  const decodeJWT = (token) => {
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      return JSON.parse(jsonPayload);
+    } catch (e) {
+      console.error('Error decoding JWT:', e);
+      return null;
+    }
+  };
+  
+  // Then update the fetchUserProfile function
   useEffect(() => {
     const fetchUserProfile = async () => {
       try {
         setLoading(true);
         const token = localStorage.getItem('token');
-
+  
         if (!token) {
           setError('Authentication required. Please log in.');
           setLoading(false);
           return;
         }
-
+  
+        // Debug - Check token contents
+        const decodedToken = decodeJWT(token);
+        console.log('Decoded token:', decodedToken);
+  
+        // Fix for missing userId in token - try to re-authenticate
+        if (!decodedToken || !decodedToken.userId) {
+          console.warn('Token missing userId, attempting to re-authenticate via wallet');
+          
+          const walletAddress = localStorage.getItem('walletAddress');
+          if (walletAddress) {
+            try {
+              // Try to get a new token using wallet address
+              const walletAuthResponse = await axios.post(`${API_URL}/users/wallet-auth`, {
+                walletAddress
+              });
+              
+              if (walletAuthResponse.data.token) {
+                console.log('Got new token from wallet auth');
+                localStorage.setItem('token', walletAuthResponse.data.token);
+                
+                // Restart the fetch with new token
+                window.location.reload();
+                return;
+              }
+            } catch (walletError) {
+              console.error('Failed to re-authenticate with wallet:', walletError);
+            }
+          }
+        }
+  
         const response = await axios.get(`${API_URL}/users/profile`, {
           headers: { Authorization: `Bearer ${token}` }
         });
-
+  
         console.log('Profile response:', response.data);
-
+  
         if (response.data && response.data.user) {
           setUser(response.data.user);
           setFormData({
@@ -51,38 +99,43 @@ const Profile = () => {
         } else {
           setError('Invalid response format from server');
         }
-
+  
         setLoading(false);
       } catch (error) {
         console.error('Error fetching profile:', error);
-
+  
         // More detailed error messaging
         if (error.response) {
-          // The request was made and the server responded with a status code
           console.error('Server response:', error.response.data);
-
+  
           if (error.response.status === 401) {
             setError('Your session has expired. Please log in again.');
-            // Optionally redirect to login page
-            // localStorage.removeItem('token');
-            // window.location.href = '/login';
+            // Suggest logging out
+            if (confirm('Your session has expired. Would you like to log out and try again?')) {
+              localStorage.removeItem('token');
+              window.location.href = '/';
+            }
+          } else if (error.response.status === 400 && 
+                     error.response.data.message === 'Invalid user ID') {
+            setError('Your login token is missing user information. Please log out and back in.');
+            
+            // Add a logout button in the UI
+            // This is handled in the error UI section
           } else if (error.response.status === 404) {
             setError('User profile not found. Please complete your registration.');
           } else {
             setError(`Error ${error.response.status}: ${error.response.data.message || 'Server error'}`);
           }
         } else if (error.request) {
-          // The request was made but no response was received
           setError('No response from server. Please check your connection.');
         } else {
-          // Something happened in setting up the request
           setError(`Request error: ${error.message}`);
         }
-
+  
         setLoading(false);
       }
     };
-
+  
     fetchUserProfile();
   }, []);
 
@@ -241,12 +294,35 @@ const Profile = () => {
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <div className="text-xl text-white font-semibold mb-2">Error</div>
           <div className="text-red-300">{error}</div>
-          <button
-            onClick={() => window.location.href = '/'}
-            className="mt-6 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white"
-          >
-            Return to Home
-          </button>
+          
+          <div className="mt-6 flex flex-col sm:flex-row justify-center gap-4">
+            {/* Show log out button if the error is about invalid ID */}
+            {error.includes('Invalid user ID') || error.includes('missing user information') ? (
+              <button
+                onClick={() => {
+                  localStorage.removeItem('token');
+                  window.location.href = '/';
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white"
+              >
+                Log Out & Try Again
+              </button>
+            ) : (
+              <button
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white"
+              >
+                Retry
+              </button>
+            )}
+            
+            <button
+              onClick={() => window.location.href = '/'}
+              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white"
+            >
+              Return to Home
+            </button>
+          </div>
         </div>
       </div>
     );
