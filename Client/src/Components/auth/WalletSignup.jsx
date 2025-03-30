@@ -45,38 +45,44 @@ const WalletSignup = () => {
     
     setIsLoading(true);
     setError('');
-
+  
     try {
       const response = await axios.post(`${API_URL}/users/wallet-register`, {
         walletAddress,
         name,
         email,
         role: userRole
+      }, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
       
-      // Save token and user data
-      localStorage.setItem('token', response.data.token);
-      localStorage.setItem('userRole', userRole); // Also store role in localStorage
-      
-      // Clear any wallet disconnection flag
-      localStorage.removeItem('walletDisconnected');
-      
-      // Redirect based on user role
-      if (userRole === 'freelancer') {
-        navigate('/freelancer-dashboard');
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
+        localStorage.setItem('userRole', userRole);
+        localStorage.setItem('walletAddress', walletAddress);
+        
+        // Clear any wallet disconnection flag
+        localStorage.removeItem('walletDisconnected');
+        
+        // Redirect based on user role
+        navigate(userRole === 'freelancer' ? '/freelancer-dashboard' : '/client-dashboard');
       } else {
-        navigate('/client-dashboard');
+        throw new Error('No token received from server');
       }
-      
-      console.log('Account created successfully!');
     } catch (error) {
       console.error('Registration error:', error);
       
+      let errorMessage = 'Registration failed. Please try again.';
+      
       if (error.code === 'ERR_NETWORK') {
-        setError(`Cannot connect to server. Please make sure the server is running at ${API_URL}`);
-      } else {
-        setError(error.response?.data?.message || 'Registration failed. Please try again.');
+        errorMessage = 'Cannot connect to server. Please try again later.';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
       }
+      
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
