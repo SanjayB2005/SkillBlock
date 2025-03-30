@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { User, Edit, Save, Copy, Check, Mail, Wallet, Calendar, Briefcase, Award, Shield, AlertCircle } from 'lucide-react';
 
-const API_URL = import.meta.env.VITE_API_URL ||'http://localhost:5000/api/users';
+const API_URL = import.meta.env.VITE_API_URL ||'http://localhost:5000/api';
 
 const Profile = () => {
   const [user, setUser] = useState(null);
@@ -32,7 +32,7 @@ const Profile = () => {
           return;
         }
 
-        const response = await axios.get(`${API_URL}/profile`, {
+        const response = await axios.get(`${API_URL}/users/profile`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -150,7 +150,7 @@ const Profile = () => {
       const roleChanged = user.role !== formData.role;
 
       // Update the user profile in the database
-      const response = await axios.put(`${API_URL}/profile`, formData, {
+      const response = await axios.put(`${API_URL}/users/profile`, formData, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
