@@ -18,9 +18,37 @@ const WalletSignup = () => {
 
   // Check if wallet address is available on component mount
   useEffect(() => {
-    if (!walletAddress) {
-      navigate('/');
-    }
+    const checkWallet = async () => {
+      if (!walletAddress) {
+        navigate('/');
+        return;
+      }
+  
+      try {
+        const response = await axios.post(`${API_URL}/users/wallet-auth`, {
+          walletAddress
+        });
+  
+        if (response.data.exists) {
+          // Wallet already registered, store token and redirect
+          localStorage.setItem('token', response.data.token);
+          localStorage.setItem('userRole', response.data.user.role);
+          localStorage.setItem('walletAddress', walletAddress);
+          
+          navigate(response.data.user.role === 'freelancer' 
+            ? '/freelancer-dashboard' 
+            : '/client-dashboard'
+          );
+        }
+      } catch (error) {
+        console.error('Error checking wallet:', error);
+        if (error.code === 'ERR_NETWORK') {
+          setError('Cannot connect to server. Please try again later.');
+        }
+      }
+    };
+  
+    checkWallet();
   }, [walletAddress, navigate]);
 
   // Handle next step
