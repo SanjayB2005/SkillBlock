@@ -3,6 +3,21 @@ const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const { Proposal, Project, User } = require('../models/model');
 
+
+// Get all proposals
+router.get('/', authenticateUser, async (req, res) => {
+  try {
+    const proposals = await Proposal.find()
+      .populate('freelancer', 'name email')
+      .populate('project', 'title');
+    res.json(proposals);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Other proposal routes...
+
 // Auth middleware for protected routes
 const authenticateUser = (req, res, next) => {
   try {
@@ -21,6 +36,8 @@ const authenticateUser = (req, res, next) => {
     return res.status(401).json({ message: 'Invalid or expired token' });
   }
 };
+
+
 
 // Create a new proposal
 router.post('/', authenticateUser, async (req, res) => {

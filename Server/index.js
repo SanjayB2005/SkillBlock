@@ -85,12 +85,32 @@ app.get('/api/status', (req, res) => {
   });
 });
 
+app.get('/api/debug/routes', (req, res) => {
+  const routes = app._router.stack
+    .filter(r => r.route)
+    .map(r => ({
+      path: r.route.path,
+      method: Object.keys(r.route.methods).join(', ').toUpperCase()
+    }));
+  res.json(routes);
+});
+
 // Mount API routes
 app.use('/', rootRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/proposals', proposalRoutes);
 app.use('/api/health', healthRoutes);
+
+// Add this after mounting routes
+console.log('📋 Registered routes:', app._router.stack
+  .filter(r => r.route)
+  .map(r => ({
+    path: r.route.path,
+    method: Object.keys(r.route.methods).join(', ').toUpperCase()
+  }))
+);
+
 
 // 404 handler
 app.use((req, res) => {
