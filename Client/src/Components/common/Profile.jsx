@@ -39,136 +39,144 @@ const Profile = () => {
   };
   
   // Then update the fetchUserProfile function
-  useEffect(() => {
-    const fetchUserProfile = async () => {
-      try {
-        setLoading(true);
-        const token = localStorage.getItem('token');
+useEffect(() => {
+  let isMounted = true;
+  const controller = new AbortController();
+  const signal = controller.signal;
   
-        if (!token) {
+  const fetchUserProfile = async (retryCount = 0) => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+
+      if (!token) {
+        if (isMounted) {
           setError('Authentication required. Please log in.');
           setLoading(false);
-          return;
         }
-  
-        // Debug - Check token contents
-        const decodedToken = decodeJWT(token);
-        console.log('Decoded token:', decodedToken);
-  
-        // Check if token needs refresh (no userId or token expiration within 1 hour)
-        const needsRefresh = !decodedToken || 
-                            !decodedToken.userId || 
-                            (decodedToken.exp && (decodedToken.exp * 1000 - Date.now() < 3600000));
+        return;
+      }
+
+      // Debug - Check token contents
+      const decodedToken = decodeJWT(token);
+      console.log('Decoded token:', decodedToken);
+
+      // Check if token is valid
+      const needsRefresh = !decodedToken || !decodedToken.userId;
+      
+      // If token needs refresh and we haven't tried yet
+      if (needsRefresh && !refreshAttempted) {
+        if (isMounted) setRefreshAttempted(true);
         
-        // Only try to refresh if we haven't already attempted it
-        if (needsRefresh && !refreshAttempted) {
-          console.warn('Token invalid or expiring soon, attempting to refresh');
-          setRefreshAttempted(true); // Prevent infinite refresh loops
-          
-          const walletAddress = localStorage.getItem('walletAddress');
-          if (walletAddress) {
-            try {
-              console.log('Attempting wallet re-authentication with address:', walletAddress);
-              const walletAuthResponse = await axios.post(`${API_URL}/users/wallet-auth`, {
-                walletAddress
-              });
+        const walletAddress = localStorage.getItem('walletAddress');
+        if (walletAddress) {
+          try {
+            console.log('Attempting wallet re-authentication with address:', walletAddress);
+            
+            // Use a longer timeout for wallet auth
+            const walletAuthResponse = await axios.post(
+              `${API_URL}/users/wallet-auth`, 
+              { walletAddress },
+              { 
+                timeout: 15000,
+                signal
+              }
+            );
+            
+            if (walletAuthResponse.data?.token) {
+              localStorage.setItem('token', walletAuthResponse.data.token);
+              const newToken = localStorage.getItem('token');
               
-              if (walletAuthResponse.data && walletAuthResponse.data.token) {
-                console.log('Got new token from wallet auth');
-                localStorage.setItem('token', walletAuthResponse.data.token);
-                
-                // Get a fresh copy of the new token
-                const newToken = localStorage.getItem('token');
-                const newDecodedToken = decodeJWT(newToken);
-                console.log('New token decoded:', newDecodedToken);
-                
-                // Now proceed with the profile fetch using the new token
+              if (isMounted) {
                 try {
+                  // Use a longer timeout for profile fetch after re-auth
                   const response = await axios.get(`${API_URL}/users/profile`, {
-                    headers: { Authorization: `Bearer ${newToken}` }
+                    headers: { Authorization: `Bearer ${newToken}` },
+                    timeout: 15000,
+                    signal
                   });
                   
                   handleProfileResponse(response);
                 } catch (innerError) {
-                  console.error('Failed to fetch profile with new token:', innerError);
                   handleFetchError(innerError);
                 }
-                
-                return; // Exit the function as we've already handled everything
+                return;
               }
-            } catch (walletError) {
-              console.error('Failed to re-authenticate with wallet:', walletError);
-              // Continue with the original token as a fallback
             }
+          } catch (walletError) {
+            console.error('Failed to re-authenticate with wallet:', walletError);
+            // Continue with original token
           }
         }
-  
-        // Last resort - try adding the walletAddress as a header parameter
-        const headers = { Authorization: `Bearer ${token}` };
-        const walletAddress = localStorage.getItem('walletAddress');
-        if (walletAddress) {
-          headers['X-Wallet-Address'] = walletAddress;
-        }
-        
-        const response = await axios.get(`${API_URL}/users/profile`, { headers });
-        handleProfileResponse(response);
-      } catch (error) {
-        handleFetchError(error);
       }
-    };
-    
-    // Helper function to handle successful profile response
-    const handleProfileResponse = (response) => {
-      console.log('Profile response:', response.data);
-      
-      if (response.data && response.data.user) {
-        setUser(response.data.user);
-        setFormData({
-          name: response.data.user.name || '',
-          email: response.data.user.email || '',
-          bio: response.data.user.bio || '',
-          skills: response.data.user.skills || [],
-          role: response.data.user.role || 'client'
+
+      // Try to fetch profile with existing token
+      try {
+        const response = await axios.get(`${API_URL}/users/profile`, { 
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'Cache-Control': 'no-cache' 
+          },
+          timeout: 15000, // Increase timeout to 15 seconds
+          signal
         });
-        setError(null);
-      } else {
-        setError('Invalid response format from server');
-      }
-      
-      setLoading(false);
-    };
-    
-    // Helper function to handle fetch errors
-    const handleFetchError = (error) => {
-      console.error('Error fetching profile:', error);
-      
-      if (error.response) {
-        console.error('Server response:', error.response.data);
-        console.error('Status code:', error.response.status);
         
-        if (error.response.status === 401) {
-          setError('Your session has expired. Please log in again.');
-          localStorage.removeItem('token');
-        } else if (error.response.status === 400 && 
-                   error.response.data.message === 'Invalid user ID') {
-          // This is the specific error we're handling
-          setError('Your authentication token is invalid. Please log out and log in again.');
-        } else if (error.response.status === 404) {
-          setError('User profile not found. Please complete your registration.');
+        if (isMounted) handleProfileResponse(response);
+      } catch (error) {
+        if (error.code === 'ERR_NETWORK' && retryCount < 3) {
+          // Network error - retry after a delay
+          console.log(`Network error, retrying (${retryCount + 1}/3)...`);
+          setTimeout(() => {
+            if (isMounted) fetchUserProfile(retryCount + 1);
+          }, 2000 * (retryCount + 1)); // Exponential backoff
         } else {
-          setError(`Error ${error.response.status}: ${error.response.data.message || 'Server error'}`);
+          if (isMounted) handleFetchError(error);
         }
-      } else if (error.request) {
-        setError(`No response from server at ${API_URL}. Please check your connection.`);
-      } else {
-        setError(`Request error: ${error.message}`);
       }
-      
-      setLoading(false);
-    };
+    } catch (error) {
+      if (isMounted) handleFetchError(error);
+    }
+  };
   
-    fetchUserProfile();
-  }, [refreshAttempted]);
+  // Modify handleFetchError to better handle network errors
+  const handleFetchError = (error) => {
+    console.error('Error fetching profile:', error);
+    
+    if (error.code === 'ERR_NETWORK') {
+      setError('Network error - the server is not responding. Please check your internet connection or try again later.');
+    } else if (error.response) {
+      // Server responded with error
+      console.error('Server response:', error.response.data);
+      console.error('Status code:', error.response.status);
+      
+      if (error.response.status === 401) {
+        setError('Your session has expired. Please log in again.');
+        localStorage.removeItem('token');
+      } else if (error.response.status === 400 && 
+                 error.response.data.message === 'Invalid user ID') {
+        setError('Your authentication token is invalid. Please log out and log in again.');
+      } else if (error.response.status === 404) {
+        setError('User profile not found. Please complete your registration.');
+      } else {
+        setError(`Error ${error.response.status}: ${error.response.data?.message || 'Server error'}`);
+      }
+    } else if (error.request) {
+      setError(`No response from server at ${API_URL}. The server might be down or experiencing issues.`);
+    } else {
+      setError(`Request error: ${error.message}`);
+    }
+    
+    setLoading(false);
+  };
+  
+  fetchUserProfile();
+  
+  // Cleanup function to prevent state updates on unmounted component
+  return () => {
+    isMounted = false;
+    controller.abort();
+  };
+}, [refreshAttempted]);
 
   // Copy wallet address to clipboard
   const copyToClipboard = () => {
@@ -326,9 +334,33 @@ const Profile = () => {
           <div className="text-xl text-white font-semibold mb-2">Error</div>
           <div className="text-red-300">{error}</div>
           
+          {/* Network error specific message */}
+          {error.includes('Network error') && (
+            <div className="mt-3 p-2 bg-red-800/50 text-red-300 text-sm rounded">
+              This could be due to:
+              <ul className="list-disc list-inside mt-1">
+                <li>The server might be starting up or temporarily down</li>
+                <li>Your internet connection may be unstable</li>
+                <li>Your browser may be blocking the connection</li>
+              </ul>
+            </div>
+          )}
+          
           <div className="mt-6 flex flex-col sm:flex-row justify-center gap-4">
-            {/* Show log out button if the error is about invalid ID */}
-            {error.includes('Invalid user ID') || error.includes('missing user information') ? (
+            {/* Show appropriate button based on error type */}
+            {error.includes('Network error') ? (
+              <button
+                onClick={() => {
+                  setLoading(true);
+                  setError(null);
+                  // Force a complete reload after a short delay
+                  setTimeout(() => window.location.reload(), 500);
+                }}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white"
+              >
+                Retry Connection
+              </button>
+            ) : error.includes('Invalid user ID') || error.includes('invalid') ? (
               <button
                 onClick={() => {
                   localStorage.removeItem('token');
