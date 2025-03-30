@@ -24,7 +24,7 @@ function Assignments() {
       currency: 'ETH',
       minimumFractionDigits: 3,
       maximumFractionDigits: 3
-    }).format(amount).replace('ETH', 'Ξ');
+    }).format(amount).replace('ETH', 'ETH');
   };
 
   // Show notification
