@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 const userRoutes = require('./Routes/userRoutes');
 const projectRoutes = require('./Routes/projectRoutes');
 const proposalRoutes = require('./Routes/proposalRoutes');
+const healthRoutes = require('./Routes/healthRoutes');
 
 // Load environment variables
 dotenv.config();
@@ -48,6 +49,7 @@ app.get('/api/status', (req, res) => {
 app.use('/api/users', userRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/proposals', proposalRoutes);
+app.use('/api/health', healthRoutes); 
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/skillorbit', {
