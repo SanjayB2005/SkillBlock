@@ -22,19 +22,7 @@ process.on('uncaughtException', (err) => {
 });
 
 // Middleware
-app.use(cors({
-  origin: [
-    'https://skill-block-eight.vercel.app',  // Your Vercel deployment
-    'https://skillblock.onrender.com',       // Your Render deployment
-    'http://localhost:5173',                 // Vite local development
-    'http://localhost:3000',                 // React local development
-    'http://127.0.0.1:5173'                  // Alternative local address
-  ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'X-Requested-With', 'Accept'],
-  credentials: true,
-  maxAge: 86400 // Cache preflight requests for 24 hours
-}));
+app.use(cors())
 app.use(express.json());
 
 // Enhanced request logging
@@ -42,17 +30,7 @@ app.use((req, res, next) => {
   const timestamp = new Date().toISOString();
   const { method, url, ip } = req;
   console.log(`[${timestamp}] ${method} ${url} from ${ip}`);
-  
-  // Add CORS headers on every response as a backup
-  res.header('Access-Control-Allow-Origin', req.headers.origin);
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  
-  if (method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  
+
   if (Object.keys(req.body).length) {
     console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
   }

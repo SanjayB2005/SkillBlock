@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { User, Edit, Save, Copy, Check, Mail, Wallet, Calendar, Briefcase, Award, Shield, AlertCircle } from 'lucide-react';
 
-const API_URL = import.meta.env.VITE_API_URL ||'http://localhost:5000/api/users';
+const API_URL = import.meta.env.VITE_API_URL ||'http://localhost:5000/api';
 
 const Profile = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({
@@ -18,26 +19,132 @@ const Profile = () => {
     skills: [],
     role: 'client'
   });
+  
+
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const decodeToken = (token) => {
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      return JSON.parse(jsonPayload);
+    } catch (error) {
+      console.error('Token decode error:', error);
+      return null;
+    }
+  };
+
+  
+
+
+  
 
   // Fetch user data with improved error handling
   useEffect(() => {
     const fetchUserProfile = async () => {
       try {
         setLoading(true);
-        const token = localStorage.getItem('token');
 
+          // Check server availability first
+        
+        // Check if we're online
+        if (!navigator.onLine) {
+          setError('You are currently offline. Please check your internet connection and try again.');
+          setLoading(false);
+          return;
+        }
+        
+        const token = localStorage.getItem('token');
+      
         if (!token) {
           setError('Authentication required. Please log in.');
           setLoading(false);
           return;
         }
-
-        const response = await axios.get(`${API_URL}/users/profile`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-
+      
+        // Log token details to help debug
+        console.log('Token exists, checking contents...');
+        const decodedToken = decodeToken(token);
+        console.log('Token payload:', decodedToken);
+      
+        // Check token validity
+        if (!decodedToken || !decodedToken.userId) {
+          console.warn('Token missing userId, attempting wallet re-authentication');
+          const walletAddress = localStorage.getItem('walletAddress');
+          
+          if (walletAddress) {
+            try {
+              // Re-authenticate with wallet
+              const authResponse = await axios.post(`${API_URL}/users/wallet-auth`, { walletAddress });
+              
+              if (authResponse.data.token) {
+                localStorage.setItem('token', authResponse.data.token);
+                console.log('Received new token from wallet auth:', authResponse.data.token);
+                
+                // Check the new token
+                const newDecodedToken = decodeToken(authResponse.data.token);
+                console.log('New token payload:', newDecodedToken);
+                
+                // Retry with new token
+                window.location.reload();
+                return;
+              }
+            } catch (walletError) {
+              console.error('Wallet re-auth failed:', walletError);
+            }
+          }
+          
+          setError('Invalid authentication token. Please log out and log in again.');
+          setLoading(false);
+          return;
+        }
+        
+        // Get wallet address for additional identification
+        const walletAddress = localStorage.getItem('walletAddress');
+        
+        // Verify that API_URL is correct
+        console.log('Using API URL:', API_URL);
+        
+        // Use fetchWithRetry for better handling of network issues and 400 errors
+        const config = {
+          method: 'get',
+          url: `${API_URL}/users/profile`,
+          headers: { 
+            Authorization: `Bearer ${token}`,  // Make sure token is properly formatted with "Bearer "
+            'Content-Type': 'application/json',
+          },
+          timeout: 15000 // Increased timeout to 15 seconds
+        };
+        
+        // Add wallet address to query params if available
+        if (walletAddress) {
+          config.url = `${API_URL}/users/profile?walletAddress=${encodeURIComponent(walletAddress)}`;
+        }
+        
+        
+        console.log('Making request with config:', config);
+        const response = await axios(config);
+        
+       
         console.log('Profile response:', response.data);
-
+      
         if (response.data && response.data.user) {
           setUser(response.data.user);
           setFormData({
@@ -51,40 +158,41 @@ const Profile = () => {
         } else {
           setError('Invalid response format from server');
         }
-
+      
         setLoading(false);
       } catch (error) {
         console.error('Error fetching profile:', error);
-
-        // More detailed error messaging
-        if (error.response) {
-          // The request was made and the server responded with a status code
-          console.error('Server response:', error.response.data);
-
+      
+        // Improved error handling with network-specific messages
+        if (error.message === 'You are currently offline') {
+          setError('You are currently offline. Please check your internet connection and try again.');
+        } else if (error.code === 'ERR_NETWORK') {
+          setError('Cannot connect to the server. Please check your internet connection or try again later.');
+        } else if (error.code === 'ECONNABORTED') {
+          setError('Request timed out. The server might be overloaded or temporarily down.');
+        } else if (error.response) {
+          // Handle based on status code
           if (error.response.status === 401) {
             setError('Your session has expired. Please log in again.');
-            // Optionally redirect to login page
-            // localStorage.removeItem('token');
-            // window.location.href = '/login';
           } else if (error.response.status === 404) {
-            setError('User profile not found. Please complete your registration.');
+            setError('Profile not found. You may need to complete your registration first.');
           } else {
-            setError(`Error ${error.response.status}: ${error.response.data.message || 'Server error'}`);
+            setError(`Server error (${error.response.status}): ${error.response.data?.message || 'Unknown error'}`);
           }
-        } else if (error.request) {
-          // The request was made but no response was received
-          setError('No response from server. Please check your connection.');
         } else {
-          // Something happened in setting up the request
-          setError(`Request error: ${error.message}`);
+          setError('Failed to connect to the server. Please try again later.');
         }
-
+      
         setLoading(false);
       }
     };
-
+  
+    // Execute the fetch
     fetchUserProfile();
+    
+    return () => {};
   }, []);
+
 
   // Copy wallet address to clipboard
   const copyToClipboard = () => {
@@ -235,18 +343,49 @@ const Profile = () => {
 
   // Error state
   if (error) {
+    const isNetworkError = error.includes('offline') || error.includes('connect');
+    
     return (
       <div className="min-h-screen pt-24 pb-12 flex justify-center items-center">
         <div className="bg-red-900/30 border border-red-700 rounded-xl p-8 text-center max-w-md">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <div className="text-xl text-white font-semibold mb-2">Error</div>
+          <div className="text-xl text-white font-semibold mb-2">
+            {isNetworkError ? 'Connection Error' : 'Error'}
+          </div>
           <div className="text-red-300">{error}</div>
-          <button
-            onClick={() => window.location.href = '/'}
-            className="mt-6 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white"
-          >
-            Return to Home
-          </button>
+          <div className="mt-6 flex flex-col md:flex-row justify-center gap-3">
+            {isNetworkError ? (
+              <button
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white"
+              >
+                Try Again
+              </button>
+            ) : error.includes('token') || error.includes('session') || error.includes('authentication') ? (
+              <button
+                onClick={() => {
+                  localStorage.removeItem('token');
+                  window.location.href = '/';
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white"
+              >
+                Log Out & Reset
+              </button>
+            ) : (
+              <button
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white"
+              >
+                Retry
+              </button>
+            )}
+            <button
+              onClick={() => window.location.href = '/'}
+              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white"
+            >
+              Return to Home
+            </button>
+          </div>
         </div>
       </div>
     );

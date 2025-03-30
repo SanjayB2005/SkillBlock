@@ -241,28 +241,46 @@ router.get('/profile', async (req, res) => {
       return res.status(401).json({ message: 'No token provided' });
     }
     
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
-    const userId = decoded.userId;
-    
-    // Find user by ID
-    const user = await User.findById(userId).select('-password');
-    
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    
-    res.json({ user });
-  } catch (error) {
-    console.error('Profile error:', error);
-    
-    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
+      const userId = decoded.userId;
+      
+      // Get wallet address either from query or header
+      const walletAddress = req.query.walletAddress || req.headers['x-wallet-address'];
+      
+      console.log('Looking up profile for userId:', userId);
+      if (walletAddress) {
+        console.log('Wallet address from request:', walletAddress);
+      }
+      
+      // Find user by ID
+      const user = await User.findById(userId).select('-password');
+      
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      
+      // Verify wallet address ownership if provided (just log warning, don't block)
+      if (walletAddress && user.walletAddress && 
+          user.walletAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+        console.warn('Wallet address mismatch', {
+          tokenUserId: userId,
+          requestWallet: walletAddress,
+          userWallet: user.walletAddress
+        });
+      }
+      
+      res.json({ user });
+    } catch (jwtError) {
+      console.error('JWT verification error:', jwtError);
       return res.status(401).json({ message: 'Invalid or expired token' });
     }
-    
-    // Add this line to complete the error handling
+  } catch (error) {
+    console.error('Profile error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
+
 // Update user profile
 router.put('/profile', async (req, res) => {
   try {
