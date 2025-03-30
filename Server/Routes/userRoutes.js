@@ -62,48 +62,66 @@ router.post('/wallet-register', async (req, res) => {
     walletAddress = walletAddress.toLowerCase().trim();
     console.log('Normalized wallet address:', walletAddress);
 
-    // Check if wallet already registered
-    let user = await User.findOne({ walletAddress });
-    if (user) {
-      return res.status(400).json({ message: 'Wallet already registered' });
-    }
-
-    // Create new user with wallet
-    user = new User({
-      name: name || 'Wallet User', // Default name if not provided
-      email: email || '',
-      walletAddress,
-      walletProvider: 'metamask', // You can make this dynamic if needed
-      role: role || 'client' // Default to client if no role provided
-    });
-
-    await user.save();
-
-    // Create JWT token
-    const token = jwt.sign(
-      { userId: user._id, role: user.role },
-      process.env.JWT_SECRET || 'your_jwt_secret',
-      { expiresIn: '1h' }
-    );
-
-    res.status(201).json({
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        walletAddress: user.walletAddress,
-        role: user.role
+    try {
+      // Check if wallet already registered
+      let user = await User.findOne({ walletAddress });
+      
+      if (user) {
+        return res.status(400).json({ message: 'Wallet already registered' });
       }
-    });
 
-    console.log('User saved with wallet address:', user.walletAddress);
+      // Create new user with wallet
+      user = new User({
+        name: name || 'Wallet User', // Default name if not provided
+        email: email || '',
+        walletAddress,
+        walletProvider: 'metamask', // You can make this dynamic if needed
+        role: role || 'client', // Default to client if no role provided
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+
+      await user.save();
+      console.log('User saved successfully:', user._id);
+
+      // Create JWT token
+      const token = jwt.sign(
+        { userId: user._id, role: user.role },
+        process.env.JWT_SECRET || 'your_jwt_secret',
+        { expiresIn: '7d' }  // Increase token validity to 7 days
+      );
+
+      res.status(201).json({
+        token,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          walletAddress: user.walletAddress,
+          role: user.role
+        }
+      });
+
+      console.log('User registered with wallet address:', user.walletAddress);
+    } catch (dbError) {
+      console.error('Database operation error:', dbError);
+      
+      // Check for specific MongoDB errors
+      if (dbError.name === 'MongoServerError' && dbError.code === 11000) {
+        // This is a duplicate key error
+        return res.status(400).json({ message: 'This wallet address is already registered' });
+      }
+      
+      throw dbError; // Re-throw for general error handler
+    }
   } catch (error) {
     console.error('Wallet registration error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      message: 'Server error during registration', 
+      error: process.env.NODE_ENV === 'production' ? undefined : error.message 
+    });
   }
 });
-
 // User Registration
 router.post('/register', async (req, res) => {
   try {

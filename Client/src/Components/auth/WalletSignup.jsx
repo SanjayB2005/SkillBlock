@@ -107,8 +107,10 @@ const WalletSignup = () => {
         headers: {
           'Content-Type': 'application/json'
         },
-        timeout: 10000 // Increase timeout for registration
+        timeout: 15000 // Increase timeout for registration
       });
+      
+      console.log('Registration response:', response.data);
       
       if (response.data.token) {
         localStorage.setItem('token', response.data.token);
@@ -130,11 +132,17 @@ const WalletSignup = () => {
       
       if (error.code === 'ERR_NETWORK') {
         errorMessage = `Cannot connect to server at ${API_URL}. Please try again later.`;
-      } else if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
+      } else if (error.response) {
+        // The server responded with an error status
+        if (error.response.status === 500) {
+          errorMessage = 'The server encountered an error. Please try again later.';
+        } else if (error.response.data?.message) {
+          errorMessage = error.response.data.message;
+        }
       }
       
       setError(errorMessage);
+      setServerStatus('error');
     } finally {
       setIsLoading(false);
     }
