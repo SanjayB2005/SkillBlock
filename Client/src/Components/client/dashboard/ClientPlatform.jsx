@@ -17,7 +17,7 @@ import { EmptyState } from '../../../Components/common/EmptyState';
 import { Pagination } from '../../../Components/common/Pagination';
 
 // API URLs
-const API_URL = import.meta.env.API_URL ||'http://localhost:5000/api';
+const API_URL = import.meta.env.VITE_API_URL ||'http://localhost:5000/api';
 
 function ClientPlatform() {
   // State management

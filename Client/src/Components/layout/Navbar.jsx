@@ -4,7 +4,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import BlockchainService from '../../services/BlockchainService';
 
-const API_URL = import.meta.env.API_URL ||'http://localhost:5000/api';
+const API_URL = import.meta.env.VITE_API_URL ||'http://localhost:5000/api';
 
 const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);

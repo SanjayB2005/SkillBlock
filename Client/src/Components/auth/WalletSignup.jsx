@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Briefcase, User, Check } from 'lucide-react';
 
-const API_URL = import.meta.env.API_URL ||'http://localhost:5000/api';
+const API_URL = import.meta.env.VITE_API_URL ||'http://localhost:5000/api';
 
 const WalletSignup = () => {
   const location = useLocation();
@@ -25,10 +25,13 @@ const WalletSignup = () => {
       }
   
       try {
+        setServerStatus('connecting');
         const response = await axios.post(`${API_URL}/users/wallet-auth`, {
           walletAddress
-        });
+        }, { timeout: 5000 }); // Add timeout to prevent long waiting
   
+        setServerStatus('connected');
+        
         if (response.data.exists) {
           // Wallet already registered, store token and redirect
           localStorage.setItem('token', response.data.token);
@@ -42,8 +45,14 @@ const WalletSignup = () => {
         }
       } catch (error) {
         console.error('Error checking wallet:', error);
-        if (error.code === 'ERR_NETWORK') {
-          setError('Cannot connect to server. Please try again later.');
+        setServerStatus('error');
+        
+        if (error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED') {
+          setError('Cannot connect to server. Please check that the backend server is running and try again.');
+        } else if (error.response?.data?.message) {
+          setError(error.response.data.message);
+        } else {
+          setError('An error occurred while checking your wallet. Please try again.');
         }
       }
     };
