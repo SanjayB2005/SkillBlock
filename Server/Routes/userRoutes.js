@@ -259,25 +259,52 @@ router.get('/profile', async (req, res) => {
       return res.status(401).json({ message: 'No token provided' });
     }
     
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
-    const userId = decoded.userId;
+    // Try to get user ID from token
+    let userId;
+    
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
+      userId = decoded.userId;
+      
+      if (!userId) {
+        console.warn('Token missing userId field:', decoded);
+        
+        // Try to get wallet address from header as fallback
+        const walletAddress = req.headers['x-wallet-address'];
+        if (walletAddress) {
+          console.log('Attempting user lookup by wallet address:', walletAddress);
+          const userByWallet = await User.findOne({ walletAddress });
+          
+          if (userByWallet) {
+            console.log('Found user by wallet address');
+            return res.json({ user: userByWallet });
+          }
+        }
+        
+        return res.status(400).json({ message: 'Token missing user ID' });
+      }
+    } catch (tokenError) {
+      console.error('Token verification error:', tokenError);
+      return res.status(401).json({ message: 'Invalid or expired token' });
+    }
+    
+    // Validate userId is a valid MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      console.error('Invalid user ID format:', userId);
+      return res.status(400).json({ message: 'Invalid user ID format' });
+    }
     
     // Find user by ID
     const user = await User.findById(userId).select('-password');
     
     if (!user) {
+      console.error('User not found for ID:', userId);
       return res.status(404).json({ message: 'User not found' });
     }
     
     res.json({ user });
   } catch (error) {
     console.error('Profile error:', error);
-    
-    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
-      return res.status(401).json({ message: 'Invalid or expired token' });
-    }
-    
-    // Add this line to complete the error handling
     res.status(500).json({ message: 'Server error' });
   }
 });

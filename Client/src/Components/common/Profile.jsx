@@ -18,6 +18,7 @@ const Profile = () => {
     skills: [],
     role: 'client'
   });
+  const [refreshAttempted, setRefreshAttempted] = useState(false);
 
   // Fetch user data with improved error handling
   const decodeJWT = (token) => {
@@ -54,90 +55,120 @@ const Profile = () => {
         const decodedToken = decodeJWT(token);
         console.log('Decoded token:', decodedToken);
   
-        // Fix for missing userId in token - try to re-authenticate
-        if (!decodedToken || !decodedToken.userId) {
-          console.warn('Token missing userId, attempting to re-authenticate via wallet');
+        // Check if token needs refresh (no userId or token expiration within 1 hour)
+        const needsRefresh = !decodedToken || 
+                            !decodedToken.userId || 
+                            (decodedToken.exp && (decodedToken.exp * 1000 - Date.now() < 3600000));
+        
+        // Only try to refresh if we haven't already attempted it
+        if (needsRefresh && !refreshAttempted) {
+          console.warn('Token invalid or expiring soon, attempting to refresh');
+          setRefreshAttempted(true); // Prevent infinite refresh loops
           
           const walletAddress = localStorage.getItem('walletAddress');
           if (walletAddress) {
             try {
-              // Try to get a new token using wallet address
+              console.log('Attempting wallet re-authentication with address:', walletAddress);
               const walletAuthResponse = await axios.post(`${API_URL}/users/wallet-auth`, {
                 walletAddress
               });
               
-              if (walletAuthResponse.data.token) {
+              if (walletAuthResponse.data && walletAuthResponse.data.token) {
                 console.log('Got new token from wallet auth');
                 localStorage.setItem('token', walletAuthResponse.data.token);
                 
-                // Restart the fetch with new token
-                window.location.reload();
-                return;
+                // Get a fresh copy of the new token
+                const newToken = localStorage.getItem('token');
+                const newDecodedToken = decodeJWT(newToken);
+                console.log('New token decoded:', newDecodedToken);
+                
+                // Now proceed with the profile fetch using the new token
+                try {
+                  const response = await axios.get(`${API_URL}/users/profile`, {
+                    headers: { Authorization: `Bearer ${newToken}` }
+                  });
+                  
+                  handleProfileResponse(response);
+                } catch (innerError) {
+                  console.error('Failed to fetch profile with new token:', innerError);
+                  handleFetchError(innerError);
+                }
+                
+                return; // Exit the function as we've already handled everything
               }
             } catch (walletError) {
               console.error('Failed to re-authenticate with wallet:', walletError);
+              // Continue with the original token as a fallback
             }
           }
         }
   
-        const response = await axios.get(`${API_URL}/users/profile`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-  
-        console.log('Profile response:', response.data);
-  
-        if (response.data && response.data.user) {
-          setUser(response.data.user);
-          setFormData({
-            name: response.data.user.name || '',
-            email: response.data.user.email || '',
-            bio: response.data.user.bio || '',
-            skills: response.data.user.skills || [],
-            role: response.data.user.role || 'client'
-          });
-          setError(null);
-        } else {
-          setError('Invalid response format from server');
+        // Last resort - try adding the walletAddress as a header parameter
+        const headers = { Authorization: `Bearer ${token}` };
+        const walletAddress = localStorage.getItem('walletAddress');
+        if (walletAddress) {
+          headers['X-Wallet-Address'] = walletAddress;
         }
-  
-        setLoading(false);
+        
+        const response = await axios.get(`${API_URL}/users/profile`, { headers });
+        handleProfileResponse(response);
       } catch (error) {
-        console.error('Error fetching profile:', error);
-  
-        // More detailed error messaging
-        if (error.response) {
-          console.error('Server response:', error.response.data);
-  
-          if (error.response.status === 401) {
-            setError('Your session has expired. Please log in again.');
-            // Suggest logging out
-            if (confirm('Your session has expired. Would you like to log out and try again?')) {
-              localStorage.removeItem('token');
-              window.location.href = '/';
-            }
-          } else if (error.response.status === 400 && 
-                     error.response.data.message === 'Invalid user ID') {
-            setError('Your login token is missing user information. Please log out and back in.');
-            
-            // Add a logout button in the UI
-            // This is handled in the error UI section
-          } else if (error.response.status === 404) {
-            setError('User profile not found. Please complete your registration.');
-          } else {
-            setError(`Error ${error.response.status}: ${error.response.data.message || 'Server error'}`);
-          }
-        } else if (error.request) {
-          setError('No response from server. Please check your connection.');
-        } else {
-          setError(`Request error: ${error.message}`);
-        }
-  
-        setLoading(false);
+        handleFetchError(error);
       }
+    };
+    
+    // Helper function to handle successful profile response
+    const handleProfileResponse = (response) => {
+      console.log('Profile response:', response.data);
+      
+      if (response.data && response.data.user) {
+        setUser(response.data.user);
+        setFormData({
+          name: response.data.user.name || '',
+          email: response.data.user.email || '',
+          bio: response.data.user.bio || '',
+          skills: response.data.user.skills || [],
+          role: response.data.user.role || 'client'
+        });
+        setError(null);
+      } else {
+        setError('Invalid response format from server');
+      }
+      
+      setLoading(false);
+    };
+    
+    // Helper function to handle fetch errors
+    const handleFetchError = (error) => {
+      console.error('Error fetching profile:', error);
+      
+      if (error.response) {
+        console.error('Server response:', error.response.data);
+        console.error('Status code:', error.response.status);
+        
+        if (error.response.status === 401) {
+          setError('Your session has expired. Please log in again.');
+          localStorage.removeItem('token');
+        } else if (error.response.status === 400 && 
+                   error.response.data.message === 'Invalid user ID') {
+          // This is the specific error we're handling
+          setError('Your authentication token is invalid. Please log out and log in again.');
+        } else if (error.response.status === 404) {
+          setError('User profile not found. Please complete your registration.');
+        } else {
+          setError(`Error ${error.response.status}: ${error.response.data.message || 'Server error'}`);
+        }
+      } else if (error.request) {
+        setError(`No response from server at ${API_URL}. Please check your connection.`);
+      } else {
+        setError(`Request error: ${error.message}`);
+      }
+      
+      setLoading(false);
     };
   
     fetchUserProfile();
-  }, []);
+  }, [refreshAttempted]);
 
   // Copy wallet address to clipboard
   const copyToClipboard = () => {
