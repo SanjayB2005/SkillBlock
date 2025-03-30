@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { User, Edit, Save, Copy, Check, Mail, Wallet, Calendar, Briefcase, Award, Shield, AlertCircle } from 'lucide-react';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const API_URL = import.meta.env.VITE_API_URL ||'http://localhost:5000/api/users';
 
 const Profile = () => {
   const [user, setUser] = useState(null);
@@ -19,122 +19,53 @@ const Profile = () => {
     role: 'client'
   });
 
-  const fetchWithRetry = async (url, options, retries = 3, delay = 1000) => {
-    try {
-      return await axios(url, options);
-    } catch (error) {
-      if (error.code === 'ERR_NETWORK' && retries > 0) {
-        console.log(`Network error, retrying... (${retries} attempts left)`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        return fetchWithRetry(url, options, retries - 1, delay * 1.5);
-      }
-      throw error;
-    }
-  };
-
-
   // Fetch user data with improved error handling
   useEffect(() => {
-    let isMounted = true;
-    const controller = new AbortController();
-    
     const fetchUserProfile = async () => {
       try {
         setLoading(true);
         const token = localStorage.getItem('token');
-  
+
         if (!token) {
-          if (isMounted) {
-            setError('Authentication required. Please log in.');
-            setLoading(false);
-          }
+          setError('Authentication required. Please log in.');
+          setLoading(false);
           return;
         }
-  
-        // Try to decode token for debugging
-        const decodedToken = decodeToken(token);
-        console.log('Token payload:', decodedToken);
-  
-        // Check if we need to add the wallet address as a backup identifier
-        const walletAddress = localStorage.getItem('walletAddress');
-        const requestConfig = {
-          url: `${API_URL}/users/profile`,
-          method: 'get',
-          headers: { 
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: 10000,
-          signal: controller.signal
-        };
-        
-        // Add wallet address to headers if available
-        if (walletAddress) {
-          requestConfig.headers['X-Wallet-Address'] = walletAddress;
-        }
-  
-        // Use fetchWithRetry instead of direct axios call
-        const response = await fetchWithRetry(requestConfig, 3, 1000);
-        
+
+        const response = await axios.get(`${API_URL}/users/profile`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
         console.log('Profile response:', response.data);
-  
-        if (isMounted) {
-          if (response.data && response.data.user) {
-            setUser(response.data.user);
-            setFormData({
-              name: response.data.user.name || '',
-              email: response.data.user.email || '',
-              bio: response.data.user.bio || '',
-              skills: response.data.user.skills || [],
-              role: response.data.user.role || 'client'
-            });
-            setError(null);
-          } else {
-            setError('Invalid response format from server');
-          }
-  
-          setLoading(false);
+
+        if (response.data && response.data.user) {
+          setUser(response.data.user);
+          setFormData({
+            name: response.data.user.name || '',
+            email: response.data.user.email || '',
+            bio: response.data.user.bio || '',
+            skills: response.data.user.skills || [],
+            role: response.data.user.role || 'client'
+          });
+          setError(null);
+        } else {
+          setError('Invalid response format from server');
         }
+
+        setLoading(false);
       } catch (error) {
-        if (!isMounted) return;
-        
         console.error('Error fetching profile:', error);
-  
+
         // More detailed error messaging
         if (error.response) {
           // The request was made and the server responded with a status code
           console.error('Server response:', error.response.data);
-          console.error('Status code:', error.response.status);
-  
+
           if (error.response.status === 401) {
             setError('Your session has expired. Please log in again.');
-            
-            // Try to re-authenticate with wallet if available
-            const walletAddress = localStorage.getItem('walletAddress');
-            if (walletAddress) {
-              try {
-                console.log('Attempting wallet re-authentication');
-                const authResponse = await axios.post(`${API_URL}/users/wallet-auth`, {
-                  walletAddress
-                });
-                
-                if (authResponse.data.token) {
-                  localStorage.setItem('token', authResponse.data.token);
-                  setError('Session restored! Reloading your profile...');
-                  setTimeout(() => window.location.reload(), 1500);
-                  return;
-                }
-              } catch (retryError) {
-                console.error('Failed to re-authenticate with wallet:', retryError);
-                // Continue to logout suggestion
-              }
-            }
-            
-            // Suggest logging out if re-authentication failed or wasn't attempted
-            setError('Your session has expired. Please log in again.');
-          } else if (error.response.status === 400 && 
-                    error.response.data.message === 'Invalid user ID') {
-            setError('Your authentication token is invalid. Please log out and log in again.');
+            // Optionally redirect to login page
+            // localStorage.removeItem('token');
+            // window.location.href = '/login';
           } else if (error.response.status === 404) {
             setError('User profile not found. Please complete your registration.');
           } else {
@@ -142,42 +73,17 @@ const Profile = () => {
           }
         } else if (error.request) {
           // The request was made but no response was received
-          if (error.code === 'ERR_NETWORK') {
-            setError('Network error - cannot reach the server. Please check your connection or try again later.');
-          } else {
-            setError('No response from server. Please check your connection.');
-          }
+          setError('No response from server. Please check your connection.');
         } else {
           // Something happened in setting up the request
           setError(`Request error: ${error.message}`);
         }
-  
+
         setLoading(false);
       }
     };
-  
-    // Helper function to decode JWT tokens
-    const decodeToken = (token) => {
-      try {
-        const base64Url = token.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-        }).join(''));
-        return JSON.parse(jsonPayload);
-      } catch (error) {
-        console.error('Error decoding token:', error);
-        return null;
-      }
-    };
-  
+
     fetchUserProfile();
-    
-    // Clean up to avoid memory leaks and state updates after unmounting
-    return () => {
-      isMounted = false;
-      controller.abort();
-    };
   }, []);
 
   // Copy wallet address to clipboard
@@ -244,18 +150,9 @@ const Profile = () => {
       const roleChanged = user.role !== formData.role;
 
       // Update the user profile in the database
-      const response = await fetchWithRetry(
-        `${API_URL}/users/profile`,
-        {
-          method: 'put',
-          headers: { 
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          data: formData,
-          timeout: 10000
-        }
-      );
+      const response = await axios.put(`${API_URL}/users/profile`, formData, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
 
       console.log('Update response:', response.data);
 
