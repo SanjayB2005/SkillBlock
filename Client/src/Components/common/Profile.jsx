@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { User, Edit, Save, Copy, Check, Mail, Wallet, Calendar, Briefcase, Award, Shield, AlertCircle } from 'lucide-react';
 
-const API_URL = import.meta.env.VITE_API_URL ||'http://localhost:5000/api';
+const API_URL = import.meta.env.API_URL ||'http://localhost:5000/api/users';
 
 const Profile = () => {
   const [user, setUser] = useState(null);
@@ -18,165 +18,73 @@ const Profile = () => {
     skills: [],
     role: 'client'
   });
-  const [refreshAttempted, setRefreshAttempted] = useState(false);
 
   // Fetch user data with improved error handling
-  const decodeJWT = (token) => {
-    try {
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split('')
-          .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join('')
-      );
-      return JSON.parse(jsonPayload);
-    } catch (e) {
-      console.error('Error decoding JWT:', e);
-      return null;
-    }
-  };
-  
-  // Then update the fetchUserProfile function
-useEffect(() => {
-  let isMounted = true;
-  const controller = new AbortController();
-  const signal = controller.signal;
-  
-  const fetchUserProfile = async (retryCount = 0) => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem('token');
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        setLoading(true);
+        const token = localStorage.getItem('token');
 
-      if (!token) {
-        if (isMounted) {
+        if (!token) {
           setError('Authentication required. Please log in.');
           setLoading(false);
+          return;
         }
-        return;
-      }
 
-      // Debug - Check token contents
-      const decodedToken = decodeJWT(token);
-      console.log('Decoded token:', decodedToken);
-
-      // Check if token is valid
-      const needsRefresh = !decodedToken || !decodedToken.userId;
-      
-      // If token needs refresh and we haven't tried yet
-      if (needsRefresh && !refreshAttempted) {
-        if (isMounted) setRefreshAttempted(true);
-        
-        const walletAddress = localStorage.getItem('walletAddress');
-        if (walletAddress) {
-          try {
-            console.log('Attempting wallet re-authentication with address:', walletAddress);
-            
-            // Use a longer timeout for wallet auth
-            const walletAuthResponse = await axios.post(
-              `${API_URL}/users/wallet-auth`, 
-              { walletAddress },
-              { 
-                timeout: 15000,
-                signal
-              }
-            );
-            
-            if (walletAuthResponse.data?.token) {
-              localStorage.setItem('token', walletAuthResponse.data.token);
-              const newToken = localStorage.getItem('token');
-              
-              if (isMounted) {
-                try {
-                  // Use a longer timeout for profile fetch after re-auth
-                  const response = await axios.get(`${API_URL}/users/profile`, {
-                    headers: { Authorization: `Bearer ${newToken}` },
-                    timeout: 15000,
-                    signal
-                  });
-                  
-                  handleProfileResponse(response);
-                } catch (innerError) {
-                  handleFetchError(innerError);
-                }
-                return;
-              }
-            }
-          } catch (walletError) {
-            console.error('Failed to re-authenticate with wallet:', walletError);
-            // Continue with original token
-          }
-        }
-      }
-
-      // Try to fetch profile with existing token
-      try {
-        const response = await axios.get(`${API_URL}/users/profile`, { 
-          headers: { 
-            Authorization: `Bearer ${token}`,
-            'Cache-Control': 'no-cache' 
-          },
-          timeout: 15000, // Increase timeout to 15 seconds
-          signal
+        const response = await axios.get(`${API_URL}/users/profile`, {
+          headers: { Authorization: `Bearer ${token}` }
         });
-        
-        if (isMounted) handleProfileResponse(response);
-      } catch (error) {
-        if (error.code === 'ERR_NETWORK' && retryCount < 3) {
-          // Network error - retry after a delay
-          console.log(`Network error, retrying (${retryCount + 1}/3)...`);
-          setTimeout(() => {
-            if (isMounted) fetchUserProfile(retryCount + 1);
-          }, 2000 * (retryCount + 1)); // Exponential backoff
+
+        console.log('Profile response:', response.data);
+
+        if (response.data && response.data.user) {
+          setUser(response.data.user);
+          setFormData({
+            name: response.data.user.name || '',
+            email: response.data.user.email || '',
+            bio: response.data.user.bio || '',
+            skills: response.data.user.skills || [],
+            role: response.data.user.role || 'client'
+          });
+          setError(null);
         } else {
-          if (isMounted) handleFetchError(error);
+          setError('Invalid response format from server');
         }
+
+        setLoading(false);
+      } catch (error) {
+        console.error('Error fetching profile:', error);
+
+        // More detailed error messaging
+        if (error.response) {
+          // The request was made and the server responded with a status code
+          console.error('Server response:', error.response.data);
+
+          if (error.response.status === 401) {
+            setError('Your session has expired. Please log in again.');
+            // Optionally redirect to login page
+            // localStorage.removeItem('token');
+            // window.location.href = '/login';
+          } else if (error.response.status === 404) {
+            setError('User profile not found. Please complete your registration.');
+          } else {
+            setError(`Error ${error.response.status}: ${error.response.data.message || 'Server error'}`);
+          }
+        } else if (error.request) {
+          // The request was made but no response was received
+          setError('No response from server. Please check your connection.');
+        } else {
+          // Something happened in setting up the request
+          setError(`Request error: ${error.message}`);
+        }
+
+        setLoading(false);
       }
-    } catch (error) {
-      if (isMounted) handleFetchError(error);
-    }
-  };
-  
-  // Modify handleFetchError to better handle network errors
-  const handleFetchError = (error) => {
-    console.error('Error fetching profile:', error);
-    
-    if (error.code === 'ERR_NETWORK') {
-      setError('Network error - the server is not responding. Please check your internet connection or try again later.');
-    } else if (error.response) {
-      // Server responded with error
-      console.error('Server response:', error.response.data);
-      console.error('Status code:', error.response.status);
-      
-      if (error.response.status === 401) {
-        setError('Your session has expired. Please log in again.');
-        localStorage.removeItem('token');
-      } else if (error.response.status === 400 && 
-                 error.response.data.message === 'Invalid user ID') {
-        setError('Your authentication token is invalid. Please log out and log in again.');
-      } else if (error.response.status === 404) {
-        setError('User profile not found. Please complete your registration.');
-      } else {
-        setError(`Error ${error.response.status}: ${error.response.data?.message || 'Server error'}`);
-      }
-    } else if (error.request) {
-      setError(`No response from server at ${API_URL}. The server might be down or experiencing issues.`);
-    } else {
-      setError(`Request error: ${error.message}`);
-    }
-    
-    setLoading(false);
-  };
-  
-  fetchUserProfile();
-  
-  // Cleanup function to prevent state updates on unmounted component
-  return () => {
-    isMounted = false;
-    controller.abort();
-  };
-}, [refreshAttempted]);
+    };
+
+    fetchUserProfile();
+  }, []);
 
   // Copy wallet address to clipboard
   const copyToClipboard = () => {
@@ -185,27 +93,6 @@ useEffect(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
-  };
-
-
-  const handleProfileResponse = (response) => {
-    console.log('Profile response:', response.data);
-    
-    if (response.data && response.data.user) {
-      setUser(response.data.user);
-      setFormData({
-        name: response.data.user.name || '',
-        email: response.data.user.email || '',
-        bio: response.data.user.bio || '',
-        skills: response.data.user.skills || [],
-        role: response.data.user.role || 'client'
-      });
-      setError(null);
-    } else {
-      setError('Invalid response format from server');
-    }
-    
-    setLoading(false);
   };
 
   // Handle form input changes
@@ -223,41 +110,6 @@ useEffect(() => {
 
       return updatedFormData;
     });
-  };
-
-  const testConnection = async () => {
-    try {
-      setError('Testing connection to server...');
-      
-      // First try the CORS test endpoint
-      const corsResponse = await axios.get(`${API_URL}/cors-test`, { timeout: 5000 });
-      console.log('CORS test succeeded:', corsResponse.data);
-      
-      // Then try the user routes connection test
-      const userResponse = await axios.get(`${API_URL}/users/connection-test`, { timeout: 5000 });
-      console.log('User routes connection test succeeded:', userResponse.data);
-      
-      // Then try the verify-token endpoint if we have a token
-      const token = localStorage.getItem('token');
-      if (token) {
-        const tokenResponse = await axios.get(`${API_URL}/users/verify-token`, {
-          headers: { Authorization: `Bearer ${token}` },
-          timeout: 5000
-        });
-        console.log('Token verification succeeded:', tokenResponse.data);
-        
-        if (tokenResponse.data.valid) {
-          setError(`Connection tests passed! Token is valid for user ID: ${tokenResponse.data.decoded.userId}`);
-        } else {
-          setError('Connection tests passed but token is invalid. Try logging out and back in.');
-        }
-      } else {
-        setError('Connection tests passed! But no authentication token found.');
-      }
-    } catch (error) {
-      console.error('Connection test failed:', error);
-      setError(`Connection test failed: ${error.message}. Check console for details.`);
-    }
   };
 
   // Handle skill changes
@@ -389,67 +241,12 @@ useEffect(() => {
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <div className="text-xl text-white font-semibold mb-2">Error</div>
           <div className="text-red-300">{error}</div>
-          
-          {/* Network error specific message */}
-          {error.includes('Network error') && (
-            <div className="mt-3 p-2 bg-red-800/50 text-red-300 text-sm rounded">
-              This could be due to:
-              <ul className="list-disc list-inside mt-1">
-                <li>The server might be starting up or temporarily down</li>
-                <li>Your internet connection may be unstable</li>
-                <li>Your browser may be blocking the connection</li>
-              </ul>
-            </div>
-          )}
-          
-          <div className="mt-6 flex flex-col sm:flex-row justify-center gap-4">
-            {/* Add a connection test button */}
-            <button
-              onClick={testConnection}
-              className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg text-white"
-            >
-              Test Connection
-            </button>
-            
-            {/* Show appropriate button based on error type */}
-            {error.includes('Network error') ? (
-              <button
-                onClick={() => {
-                  setLoading(true);
-                  setError(null);
-                  // Force a complete reload after a short delay
-                  setTimeout(() => window.location.reload(), 500);
-                }}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white"
-              >
-                Retry Connection
-              </button>
-            ) : error.includes('Invalid user ID') || error.includes('invalid') ? (
-              <button
-                onClick={() => {
-                  localStorage.removeItem('token');
-                  window.location.href = '/';
-                }}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white"
-              >
-                Log Out & Try Again
-              </button>
-            ) : (
-              <button
-                onClick={() => window.location.reload()}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white"
-              >
-                Retry
-              </button>
-            )}
-            
-            <button
-              onClick={() => window.location.href = '/'}
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white"
-            >
-              Return to Home
-            </button>
-          </div>
+          <button
+            onClick={() => window.location.href = '/'}
+            className="mt-6 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white"
+          >
+            Return to Home
+          </button>
         </div>
       </div>
     );
