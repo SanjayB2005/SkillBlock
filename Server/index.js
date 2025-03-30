@@ -12,37 +12,76 @@ const rootRoutes = require('./Routes/rootRoutes');
 dotenv.config();
 const app = express();
 
+// Global uncaught exception handler
+process.on('uncaughtException', (err) => {
+  console.error('🔥 UNCAUGHT EXCEPTION! Shutting down...');
+  console.error('Name:', err.name);
+  console.error('Message:', err.message);
+  console.error('Stack:', err.stack);
+  process.exit(1);
+});
+
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// Add at the very beginning of your file
-process.on('uncaughtException', (err) => {
-  console.error('UNCAUGHT EXCEPTION! 💥 Shutting down...');
-  console.error(err.name, err.message);
-  console.error(err.stack);
-  process.exit(1);
-});
-
-// Rest of your existing code
-
-// Enhanced request logging with more details
+// Enhanced request logging
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  const timestamp = new Date().toISOString();
+  const { method, url, ip } = req;
+  console.log(`[${timestamp}] ${method} ${url} from ${ip}`);
   if (Object.keys(req.body).length) {
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
   }
   next();
 });
 
-// Basic status endpoint for health checks
+// MongoDB Connection with retry logic
+const connectDB = async (retries = 5) => {
+  while (retries) {
+    try {
+      await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/skillorbit', {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+        serverSelectionTimeoutMS: 5000,
+        socketTimeoutMS: 45000,
+      });
+      console.log('✅ Connected to MongoDB');
+      return true;
+    } catch (err) {
+      console.error(`❌ MongoDB connection attempt ${6 - retries}/5 failed:`, err.message);
+      retries -= 1;
+      if (!retries) {
+        console.error('❌ Could not connect to MongoDB after 5 attempts');
+        return false;
+      }
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+  }
+};
+
+// Database connection monitoring
+mongoose.connection.on('connected', () => {
+  console.log('🔄 Mongoose connected to DB');
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('❌ Mongoose connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('❗ Mongoose disconnected');
+});
+
+// Health check endpoint
 app.get('/api/status', (req, res) => {
-  // Include MongoDB connection status
   const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
   res.json({ 
-    status: 'Server is running', 
+    status: 'Server is running',
     timestamp: new Date(),
-    database: dbStatus
+    database: dbStatus,
+    environment: process.env.NODE_ENV || 'development',
+    uptime: process.uptime()
   });
 });
 
@@ -51,36 +90,10 @@ app.use('/', rootRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/proposals', proposalRoutes);
-app.use('/api/health', healthRoutes); 
+app.use('/api/health', healthRoutes);
 
-// MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/skillorbit', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => {
-  console.log(process.env.MONGODB_URI);
-  console.log('Connected to MongoDB');
-})
-.catch((err) => {
-  console.error('MongoDB connection error:', err);
-});
-
-// Setup connection event listeners
-mongoose.connection.on('connected', () => {
-  console.log('Mongoose connected to DB');
-});
-
-mongoose.connection.on('error', (err) => {
-  console.error('Mongoose connection error:', err);
-});
-
-mongoose.connection.on('disconnected', () => {
-  console.log('Mongoose disconnected');
-});
-
-// 404 handler for undefined routes
-app.use((req, res, next) => {
+// 404 handler
+app.use((req, res) => {
   console.log(`⚠️ Route not found: ${req.method} ${req.url}`);
   res.status(404).json({ 
     message: 'Endpoint not found',
@@ -90,37 +103,66 @@ app.use((req, res, next) => {
   });
 });
 
-// Error handling middleware with detailed logging
+// Global error handler
 app.use((err, req, res, next) => {
   console.error('❌ Server error:', err);
   console.error('Stack trace:', err.stack);
   
-  // Don't expose stack traces in production
   const isProduction = process.env.NODE_ENV === 'production';
   
+  // Handle specific error types
+  if (err.name === 'MongoError' || err.name === 'MongooseError') {
+    return res.status(503).json({
+      message: 'Database service temporarily unavailable',
+      error: isProduction ? 'Service unavailable' : err.message,
+      status: 'error',
+      timestamp: new Date()
+    });
+  }
+
   res.status(err.statusCode || 500).json({ 
-    message: 'Server error', 
+    message: 'Server error',
     error: isProduction ? 'An unexpected error occurred' : err.message,
     path: req.url,
     timestamp: new Date()
   });
 });
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
+// Graceful shutdown handlers
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
+
+async function gracefulShutdown(signal) {
+  console.log(`📥 ${signal} received. Starting graceful shutdown...`);
   try {
     await mongoose.connection.close();
-    console.log('MongoDB connection closed through app termination');
+    console.log('✅ MongoDB connection closed');
     process.exit(0);
   } catch (err) {
-    console.error('Error during graceful shutdown:', err);
+    console.error('❌ Error during graceful shutdown:', err);
     process.exit(1);
   }
-});
+}
 
-// Start the server
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-  console.log(`📊 Health check available at http://localhost:${PORT}/api/status`);
+// Start server
+const startServer = async () => {
+  const dbConnected = await connectDB();
+  
+  if (!dbConnected) {
+    console.error('❌ Server startup failed due to database connection issues');
+    process.exit(1);
+  }
+
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`✅ Server running on port ${PORT}`);
+    console.log(`📊 Health check: http://localhost:${PORT}/api/status`);
+    console.log(`🏠 Root endpoint: http://localhost:${PORT}/`);
+    console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  });
+};
+
+startServer().catch(err => {
+  console.error('❌ Failed to start server:', err);
+  process.exit(1);
 });
