@@ -3,6 +3,50 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { User } = require('../models/model');
 
+router.get('/', async (req, res) => {
+  try {
+    // You might want to add authentication here
+    const users = await User.find()
+      .select('-password') // Exclude password from response
+      .sort({ createdAt: -1 }); // Sort by newest first
+    
+    res.json({
+      count: users.length,
+      users: users.map(user => ({
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        walletAddress: user.walletAddress,
+        createdAt: user.createdAt
+      }))
+    });
+  } catch (error) {
+    console.error('Get users error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Add a route to get a specific user by ID
+router.get('/:id', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id)
+      .select('-password');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    res.json({ user });
+  } catch (error) {
+    console.error('Get user error:', error);
+    if (error.kind === 'ObjectId') {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Add this test endpoint (remove in production)
 router.post('/wallet-register', async (req, res) => {
   try {
