@@ -73,52 +73,90 @@ const Profile = () => {
       try {
         setLoading(true);
         setError(null);
-  
+        
         const token = localStorage.getItem('token');
         const walletAddress = localStorage.getItem('walletAddress');
-  
+        
         if (!token && !walletAddress) {
-          throw new Error('Authentication required. Please connect your wallet.');
+          navigate('/');
+          return;
         }
-  
-        // Debug info
+        
         console.log('Fetching profile with:', {
           token: token ? 'Present' : 'Not present',
-          walletAddress,
+          walletAddress: walletAddress || 'Not present',
           apiUrl: API_URL
         });
-  
-        // Construct request config
-        const config = {
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token && { Authorization: `Bearer ${token}` })
-          },
-          params: {
-            ...(walletAddress && { walletAddress: walletAddress.toLowerCase().trim() })
+        
+        // Try wallet-based authentication first if we have a wallet address
+        if (walletAddress) {
+          try {
+            console.log(`Authenticating with wallet: ${walletAddress}`);
+            
+            const walletAuthResponse = await axios.post(`${API_URL}/users/wallet-auth`, {
+              walletAddress
+            }, { 
+              timeout: 10000,
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            console.log('Wallet auth response:', walletAuthResponse.data);
+            
+            if (walletAuthResponse.data.success) {
+              // Update token if needed
+              if (walletAuthResponse.data.token) {
+                localStorage.setItem('token', walletAuthResponse.data.token);
+              }
+              
+              // Set user data from the wallet auth response
+              setUser(walletAuthResponse.data.user);
+              setFormData({
+                name: walletAuthResponse.data.user.name || '',
+                email: walletAuthResponse.data.user.email || '',
+                bio: walletAuthResponse.data.user.bio || '',
+                skills: walletAuthResponse.data.user.skills || [],
+                role: walletAuthResponse.data.user.role || 'client'
+              });
+              
+              setLoading(false);
+              return; // Exit early since we got the user data
+            }
+          } catch (walletError) {
+            console.warn('Wallet auth failed, falling back to token auth:', walletError.message);
+            // Continue to token-based auth if wallet auth fails
           }
-        };
-  
-        // Changed from /users to /users/profile
-        const response = await axios.get(`${API_URL}/users/profile`, config);
-  
-        // Log the response
-        console.log('Server Response:', response.data);
-  
-        if (!response.data?.user) {
-          throw new Error('Invalid response format from server');
         }
-  
-        // Update state with user data
-        setUser(response.data.user);
-        setFormData({
-          name: response.data.user.name || '',
-          email: response.data.user.email || '',
-          bio: response.data.user.bio || '',
-          skills: response.data.user.skills || [],
-          role: response.data.user.role || 'client'
-        });
-  
+        
+        // Token-based authentication as fallback
+        if (token) {
+          const response = await axios.get(`${API_URL}/users/profile`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 10000
+          });
+          
+          console.log('Profile response:', response.data);
+          
+          if (!response.data?.user) {
+            throw new Error('Invalid response format from server');
+          }
+          
+          setUser(response.data.user);
+          setFormData({
+            name: response.data.user.name || '',
+            email: response.data.user.email || '',
+            bio: response.data.user.bio || '',
+            skills: response.data.user.skills || [],
+            role: response.data.user.role || 'client'
+          });
+        } else {
+          throw new Error('No authentication method available');
+        }
+        
       } catch (error) {
         console.error('Profile Error Details:', {
           message: error.message,
@@ -130,10 +168,10 @@ const Profile = () => {
             hasWallet: !!localStorage.getItem('walletAddress')
           }
         });
-  
+        
         const errorMessage = getErrorMessage(error);
         setError(errorMessage);
-  
+        
         // Handle authentication errors
         if (error.response?.status === 401) {
           localStorage.removeItem('token');
@@ -143,7 +181,7 @@ const Profile = () => {
         setLoading(false);
       }
     };
-  
+    
     fetchUserProfile();
   }, [navigate]); // Added navigate to dependency array
 
@@ -212,7 +250,7 @@ const Profile = () => {
       const roleChanged = user.role !== formData.role;
 
       // Update the user profile in the database
-      const response = await axios.put(`${API_URL}/users`, formData, {
+      const response = await axios.put(`${API_URL}/users/profile`, formData, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
