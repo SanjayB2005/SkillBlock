@@ -2,6 +2,15 @@ const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { User } = require('../models/model');
+const verifyToken = require('../middleware/auth');
+
+router.get('/test', (req, res) => {
+  res.json({ 
+    message: 'User routes are working',
+    timestamp: new Date(),
+    env: process.env.NODE_ENV
+  });
+});
 
 router.get('/', async (req, res) => {
   try {
@@ -55,38 +64,49 @@ router.post('/wallet-register', async (req, res) => {
     console.log('Received registration request:', { walletAddress, name, email, role });
 
     if (!walletAddress) {
-      return res.status(400).json({ message: 'Wallet address is required' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'Wallet address is required' 
+      });
     }
 
-    // Normalize wallet address (make lowercase and remove whitespace)
+    // Normalize wallet address
     walletAddress = walletAddress.toLowerCase().trim();
-    console.log('Normalized wallet address:', walletAddress);
 
     // Check if wallet already registered
     let user = await User.findOne({ walletAddress });
     if (user) {
-      return res.status(400).json({ message: 'Wallet already registered' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'Wallet already registered' 
+      });
     }
 
     // Create new user with wallet
     user = new User({
-      name: name || 'Wallet User', // Default name if not provided
+      name: name || 'Wallet User',
       email: email || '',
       walletAddress,
-      walletProvider: 'metamask', // You can make this dynamic if needed
-      role: role || 'client' // Default to client if no role provided
+      walletProvider: 'metamask',
+      role: role || 'client',
+      createdAt: Date.now()
     });
 
     await user.save();
 
     // Create JWT token
     const token = jwt.sign(
-      { userId: user._id, role: user.role },
+      { 
+        userId: user._id, 
+        role: user.role,
+        walletAddress: user.walletAddress 
+      },
       process.env.JWT_SECRET || 'your_jwt_secret',
-      { expiresIn: '1h' }
+      { expiresIn: '24h' }
     );
 
     res.status(201).json({
+      success: true,
       token,
       user: {
         id: user._id,
@@ -97,56 +117,16 @@ router.post('/wallet-register', async (req, res) => {
       }
     });
 
-    console.log('User saved with wallet address:', user.walletAddress);
+    console.log('User registered successfully:', user.walletAddress);
   } catch (error) {
     console.error('Wallet registration error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error during registration'
+    });
   }
 });
 
-// User Registration
-router.post('/register', async (req, res) => {
-  try {
-    const { email, password, name } = req.body;
-
-    // Check if user exists
-    let user = await User.findOne({ email });
-    if (user) {
-      return res.status(400).json({ message: 'User already exists' });
-    }
-
-    // Create new user
-    user = new User({
-      name,
-      email,
-      password
-    });
-
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(password, salt);
-
-    await user.save();
-
-    // Create JWT token
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET || 'your_jwt_secret',
-      { expiresIn: '1h' }
-    );
-
-    res.status(201).json({
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
-  }
-});
 
 // User Login
 router.post('/login', async (req, res) => {
@@ -191,41 +171,61 @@ router.post('/wallet-auth', async (req, res) => {
     const { walletAddress } = req.body;
     
     if (!walletAddress) {
-      return res.status(400).json({ message: 'Wallet address is required' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'Wallet address is required' 
+      });
     }
 
-    // Check if user with wallet address exists
-    const user = await User.findOne({ walletAddress });
+    const normalizedWalletAddress = walletAddress.toLowerCase().trim();
+    const user = await User.findOne({ walletAddress: normalizedWalletAddress })
+      .select('-password');
     
-    if (user) {
-      // User exists, create JWT token
-      const token = jwt.sign(
-        { userId: user._id },
-        process.env.JWT_SECRET || 'your_jwt_secret',
-        { expiresIn: '1h' }
-      );
-      
+    if (!user) {
       return res.json({
-        exists: true,
-        token,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          walletAddress: user.walletAddress,
-          role: user.role
-        }
-      });
-    } else {
-      // User doesn't exist
-      return res.json({
+        success: true,
         exists: false,
-        message: 'Wallet not registered'
+        message: 'Wallet not registered',
+        walletAddress: normalizedWalletAddress
       });
     }
+
+    // Generate token with role information
+    const token = jwt.sign(
+      { 
+        userId: user._id,
+        role: user.role,
+        walletAddress: user.walletAddress
+      },
+      process.env.JWT_SECRET || 'your_jwt_secret',
+      { expiresIn: '24h' }
+    );
+    
+    return res.json({
+      success: true,
+      exists: true,
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        walletAddress: user.walletAddress,
+        role: user.role,
+        bio: user.bio,
+        skills: user.skills
+      }
+    });
+
   } catch (error) {
-    console.error('Wallet auth error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Wallet auth error:', {
+      message: error.message,
+      stack: error.stack
+    });
+    
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error during wallet authentication'
+    });
   }
 });
 
@@ -234,80 +234,69 @@ router.post('/wallet-auth', async (req, res) => {
 
 router.get('/profile', async (req, res) => {
   try {
-    // Verify JWT token
     const token = req.headers.authorization?.split(' ')[1];
-    
-    if (!token) {
-      return res.status(401).json({ message: 'No token provided' });
+    const walletAddress = req.query.walletAddress;
+
+    if (!token && !walletAddress) {
+      return res.status(400).json({
+        message: 'Authentication required - provide either token or wallet address'
+      });
     }
+
+    let query = {};
     
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
-      const userId = decoded.userId;
-      
-      // Get wallet address either from query or header
-      const walletAddress = req.query.walletAddress || req.headers['x-wallet-address'];
-      
-      console.log('Looking up profile for userId:', userId);
-      if (walletAddress) {
-        console.log('Wallet address from request:', walletAddress);
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
+        query = { _id: decoded.userId };
+      } catch (jwtError) {
+        return res.status(401).json({ message: 'Invalid or expired token' });
       }
-      
-      // Find user by ID
-      const user = await User.findById(userId).select('-password');
-      
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
-      
-      // Verify wallet address ownership if provided (just log warning, don't block)
-      if (walletAddress && user.walletAddress && 
-          user.walletAddress.toLowerCase() !== walletAddress.toLowerCase()) {
-        console.warn('Wallet address mismatch', {
-          tokenUserId: userId,
-          requestWallet: walletAddress,
-          userWallet: user.walletAddress
-        });
-      }
-      
-      res.json({ user });
-    } catch (jwtError) {
-      console.error('JWT verification error:', jwtError);
-      return res.status(401).json({ message: 'Invalid or expired token' });
+    } else if (walletAddress) {
+      query = { walletAddress: walletAddress.toLowerCase() };
     }
+
+    const user = await User.findOne(query).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({
+        message: token ? 'User not found' : 'Wallet not registered'
+      });
+    }
+
+    res.json({
+      user,
+      message: 'Profile retrieved successfully'
+    });
+
   } catch (error) {
-    console.error('Profile error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Profile fetch error:', error);
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
   }
 });
 
 // Update user profile
-router.put('/profile', async (req, res) => {
+router.put('/profile', verifyToken, async (req, res) => {
   try {
-    // Verify JWT token
-    const token = req.headers.authorization?.split(' ')[1];
-    
-    if (!token) {
-      return res.status(401).json({ message: 'No token provided' });
-    }
-    
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
-    const userId = decoded.userId;
-    
-    // Find and update user
-    const { name, email, bio, skills, role } = req.body; // Add role to destructuring
-    
-    console.log('Update profile request:', { name, email, bio, skills, role });
-    
-    // If email is being updated, check if it already exists
+    const { name, email, bio, skills, role } = req.body;
+    const userId = req.user.userId;
+
+    // Email uniqueness check
     if (email) {
-      const existingUser = await User.findOne({ email, _id: { $ne: userId } });
+      const existingUser = await User.findOne({ 
+        email, 
+        _id: { $ne: userId } 
+      });
+      
       if (existingUser) {
         return res.status(400).json({ message: 'Email already in use' });
       }
     }
-    
-    // Update user data - include role in the update
+
+    // Update user
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       { 
@@ -315,37 +304,34 @@ router.put('/profile', async (req, res) => {
         email,
         bio,
         skills,
-        role, // Add role to the update
+        role,
         updatedAt: Date.now()
       },
       { new: true, runValidators: true }
     ).select('-password');
-    
+
     if (!updatedUser) {
       return res.status(404).json({ message: 'User not found' });
     }
-    
-    // Update the token with the new role if it changed
-    let newToken = token;
-    if (role && updatedUser.role !== decoded.role) {
+
+    // Only generate new token if role changed
+    let newToken;
+    if (role && updatedUser.role !== req.user.role) {
       newToken = jwt.sign(
         { userId: updatedUser._id, role: updatedUser.role },
         process.env.JWT_SECRET || 'your_jwt_secret',
         { expiresIn: '1h' }
       );
     }
-    
+
     res.json({ 
       message: 'Profile updated successfully',
       user: updatedUser,
-      token: newToken !== token ? newToken : undefined
+      ...(newToken && { token: newToken })
     });
+
   } catch (error) {
     console.error('Profile update error:', error);
-    
-    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
-      return res.status(401).json({ message: 'Invalid or expired token' });
-    }
     
     if (error.name === 'ValidationError') {
       return res.status(400).json({ message: error.message });
@@ -355,33 +341,8 @@ router.put('/profile', async (req, res) => {
   }
 });
 
-router.get('/verify-token', (req, res) => {
-  try {
-    const token = req.headers.authorization?.split(' ')[1];
-    
-    if (!token) {
-      return res.status(401).json({ message: 'No token provided' });
-    }
-    
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
-    
-    res.json({ 
-      valid: true, 
-      decoded,
-      message: 'Token is valid' 
-    });
-  } catch (error) {
-    console.error('Token verification error:', error);
-    res.status(401).json({ 
-      valid: false, 
-      message: 'Invalid token',
-      error: error.message
-    });
-  }
-});
 
-router.get('/test', (req, res) => {
-  res.json({ success: true, message: 'User routes are working' });
-});
+
+
 
 module.exports = router;

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { User, Edit, Save, Copy, Check, Mail, Wallet, Calendar, Briefcase, Award, Shield, AlertCircle } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL ||'http://localhost:5000/api';
 
 const Profile = () => {
+  const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -34,164 +36,116 @@ const Profile = () => {
     };
   }, []);
 
-  const decodeToken = (token) => {
-    try {
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split('')
-          .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join('')
-      );
-      return JSON.parse(jsonPayload);
-    } catch (error) {
-      console.error('Token decode error:', error);
-      return null;
+  const getErrorMessage = (error) => {
+    if (!navigator.onLine) {
+      return 'You are currently offline. Please check your internet connection.';
     }
+  
+    if (error.response) {
+      switch (error.response.status) {
+        case 401:
+          return 'Your session has expired. Please reconnect your wallet.';
+        case 403:
+          return 'You do not have permission to access this profile.';
+        case 404:
+          return 'Profile not found. Please complete your registration.';
+        case 400:
+          return error.response.data?.message || 'Invalid request. Please check your details.';
+        default:
+          return `Server error (${error.response.status}). Please try again later.`;
+      }
+    }
+  
+    if (error.code === 'ECONNABORTED') {
+      return 'Request timed out. Please try again.';
+    }
+  
+    if (error.code === 'ERR_NETWORK') {
+      return 'Unable to connect to the server. Please check your connection.';
+    }
+  
+    return error.message || 'An unexpected error occurred. Please try again.';
   };
-
-  
-
-
-  
 
   // Fetch user data with improved error handling
   useEffect(() => {
     const fetchUserProfile = async () => {
       try {
         setLoading(true);
-
-          // Check server availability first
-        
-        // Check if we're online
-        if (!navigator.onLine) {
-          setError('You are currently offline. Please check your internet connection and try again.');
-          setLoading(false);
-          return;
-        }
-        
+        setError(null);
+  
         const token = localStorage.getItem('token');
-      
-        if (!token) {
-          setError('Authentication required. Please log in.');
-          setLoading(false);
-          return;
-        }
-      
-        // Log token details to help debug
-        console.log('Token exists, checking contents...');
-        const decodedToken = decodeToken(token);
-        console.log('Token payload:', decodedToken);
-      
-        // Check token validity
-        if (!decodedToken || !decodedToken.userId) {
-          console.warn('Token missing userId, attempting wallet re-authentication');
-          const walletAddress = localStorage.getItem('walletAddress');
-          
-          if (walletAddress) {
-            try {
-              // Re-authenticate with wallet
-              const authResponse = await axios.post(`${API_URL}/users/wallet-auth`, { walletAddress });
-              
-              if (authResponse.data.token) {
-                localStorage.setItem('token', authResponse.data.token);
-                console.log('Received new token from wallet auth:', authResponse.data.token);
-                
-                // Check the new token
-                const newDecodedToken = decodeToken(authResponse.data.token);
-                console.log('New token payload:', newDecodedToken);
-                
-                // Retry with new token
-                window.location.reload();
-                return;
-              }
-            } catch (walletError) {
-              console.error('Wallet re-auth failed:', walletError);
-            }
-          }
-          
-          setError('Invalid authentication token. Please log out and log in again.');
-          setLoading(false);
-          return;
-        }
-        
-        // Get wallet address for additional identification
         const walletAddress = localStorage.getItem('walletAddress');
-        
-        // Verify that API_URL is correct
-        console.log('Using API URL:', API_URL);
-        
-        // Use fetchWithRetry for better handling of network issues and 400 errors
+  
+        if (!token && !walletAddress) {
+          throw new Error('Authentication required. Please connect your wallet.');
+        }
+  
+        // Debug info
+        console.log('Fetching profile with:', {
+          token: token ? 'Present' : 'Not present',
+          walletAddress,
+          apiUrl: API_URL
+        });
+  
+        // Construct request config
         const config = {
-          method: 'get',
-          url: `${API_URL}/users/profile`,
-          headers: { 
-            Authorization: `Bearer ${token}`,  // Make sure token is properly formatted with "Bearer "
+          headers: {
             'Content-Type': 'application/json',
+            ...(token && { Authorization: `Bearer ${token}` })
           },
-          timeout: 15000 // Increased timeout to 15 seconds
-        };
-        
-        // Add wallet address to query params if available
-        if (walletAddress) {
-          config.url = `${API_URL}/users/profile?walletAddress=${encodeURIComponent(walletAddress)}`;
-        }
-        
-        
-        console.log('Making request with config:', config);
-        const response = await axios(config);
-        
-       
-        console.log('Profile response:', response.data);
-      
-        if (response.data && response.data.user) {
-          setUser(response.data.user);
-          setFormData({
-            name: response.data.user.name || '',
-            email: response.data.user.email || '',
-            bio: response.data.user.bio || '',
-            skills: response.data.user.skills || [],
-            role: response.data.user.role || 'client'
-          });
-          setError(null);
-        } else {
-          setError('Invalid response format from server');
-        }
-      
-        setLoading(false);
-      } catch (error) {
-        console.error('Error fetching profile:', error);
-      
-        // Improved error handling with network-specific messages
-        if (error.message === 'You are currently offline') {
-          setError('You are currently offline. Please check your internet connection and try again.');
-        } else if (error.code === 'ERR_NETWORK') {
-          setError('Cannot connect to the server. Please check your internet connection or try again later.');
-        } else if (error.code === 'ECONNABORTED') {
-          setError('Request timed out. The server might be overloaded or temporarily down.');
-        } else if (error.response) {
-          // Handle based on status code
-          if (error.response.status === 401) {
-            setError('Your session has expired. Please log in again.');
-          } else if (error.response.status === 404) {
-            setError('Profile not found. You may need to complete your registration first.');
-          } else {
-            setError(`Server error (${error.response.status}): ${error.response.data?.message || 'Unknown error'}`);
+          params: {
+            ...(walletAddress && { walletAddress: walletAddress.toLowerCase().trim() })
           }
-        } else {
-          setError('Failed to connect to the server. Please try again later.');
+        };
+  
+        // Changed from /users to /users/profile
+        const response = await axios.get(`${API_URL}/users/profile`, config);
+  
+        // Log the response
+        console.log('Server Response:', response.data);
+  
+        if (!response.data?.user) {
+          throw new Error('Invalid response format from server');
         }
-      
+  
+        // Update state with user data
+        setUser(response.data.user);
+        setFormData({
+          name: response.data.user.name || '',
+          email: response.data.user.email || '',
+          bio: response.data.user.bio || '',
+          skills: response.data.user.skills || [],
+          role: response.data.user.role || 'client'
+        });
+  
+      } catch (error) {
+        console.error('Profile Error Details:', {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status,
+          endpoint: `${API_URL}/users/profile`,
+          auth: {
+            hasToken: !!localStorage.getItem('token'),
+            hasWallet: !!localStorage.getItem('walletAddress')
+          }
+        });
+  
+        const errorMessage = getErrorMessage(error);
+        setError(errorMessage);
+  
+        // Handle authentication errors
+        if (error.response?.status === 401) {
+          localStorage.removeItem('token');
+          navigate('/login');
+        }
+      } finally {
         setLoading(false);
       }
     };
   
-    // Execute the fetch
     fetchUserProfile();
-    
-    return () => {};
-  }, []);
+  }, [navigate]); // Added navigate to dependency array
 
 
   // Copy wallet address to clipboard
@@ -258,7 +212,7 @@ const Profile = () => {
       const roleChanged = user.role !== formData.role;
 
       // Update the user profile in the database
-      const response = await axios.put(`${API_URL}/users/profile`, formData, {
+      const response = await axios.put(`${API_URL}/users`, formData, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -325,6 +279,10 @@ const Profile = () => {
       } else {
         setError(`Request error: ${error.message}`);
       }
+
+      const errorMessage = getErrorMessage(error);
+      setError(errorMessage);
+    
 
       setLoading(false);
     }

@@ -85,64 +85,47 @@ const WalletSignup = () => {
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!userRole) {
-      setError('Please select your role to continue');
-      return;
-    }
-    
     setIsLoading(true);
     setError('');
   
     try {
-      console.log(`Attempting to register wallet at: ${API_URL}/users/wallet-register`);
-      console.log('Registration payload:', { walletAddress, name, email, role: userRole });
-      
-      const response = await axios.post(`${API_URL}/users/wallet-register`, {
+      // First check if wallet exists
+      const authResponse = await axios.post(`${API_URL}/users/wallet-auth`, {
+        walletAddress
+      });
+  
+      console.log('Wallet auth response:', authResponse.data);
+  
+      if (authResponse.data.exists) {
+        // Wallet already registered - store token and user data
+        localStorage.setItem('token', authResponse.data.token);
+        localStorage.setItem('walletAddress', authResponse.data.user.walletAddress);
+        navigate('/dashboard');
+        return;
+      }
+  
+      // Wallet not registered - proceed with registration
+      const registerResponse = await axios.post(`${API_URL}/users/wallet-register`, {
         walletAddress,
         name,
         email,
         role: userRole
-      }, {
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: 15000 // Increase timeout for registration
       });
-      
-      console.log('Registration response:', response.data);
-      
-      if (response.data.token) {
-        localStorage.setItem('token', response.data.token);
-        localStorage.setItem('userRole', userRole);
-        localStorage.setItem('walletAddress', walletAddress);
-        
-        // Clear any wallet disconnection flag
-        localStorage.removeItem('walletDisconnected');
-        
-        // Redirect based on user role
-        navigate(userRole === 'freelancer' ? '/freelancer-dashboard' : '/client-dashboard');
-      } else {
-        throw new Error('No token received from server');
+  
+      console.log('Registration response:', registerResponse.data);
+  
+      if (registerResponse.data.token) {
+        localStorage.setItem('token', registerResponse.data.token);
+        localStorage.setItem('walletAddress', registerResponse.data.user.walletAddress);
+        navigate('/dashboard');
       }
+  
     } catch (error) {
-      console.error('Registration error:', error);
-      
-      let errorMessage = 'Registration failed. Please try again.';
-      
-      if (error.code === 'ERR_NETWORK') {
-        errorMessage = `Cannot connect to server at ${API_URL}. Please try again later.`;
-      } else if (error.response) {
-        // The server responded with an error status
-        if (error.response.status === 500) {
-          errorMessage = 'The server encountered an error. Please try again later.';
-        } else if (error.response.data?.message) {
-          errorMessage = error.response.data.message;
-        }
-      }
-      
-      setError(errorMessage);
-      setServerStatus('error');
+      console.error('Signup error:', error);
+      setError(
+        error.response?.data?.message || 
+        'Failed to process wallet registration. Please try again.'
+      );
     } finally {
       setIsLoading(false);
     }

@@ -113,14 +113,35 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/proposals', proposalRoutes);
 app.use('/api/health', healthRoutes);
 
-// Add this after mounting routes
-console.log('📋 Registered routes:', app._router.stack
-  .filter(r => r.route)
-  .map(r => ({
-    path: r.route.path,
-    method: Object.keys(r.route.methods).join(', ').toUpperCase()
-  }))
-);
+const listRoutes = () => {
+  const routeList = [];
+  
+  app._router.stack.forEach((middleware) => {
+    if (middleware.route) {
+      // Routes registered directly
+      const path = middleware.route.path;
+      const methods = Object.keys(middleware.route.methods).map(m => m.toUpperCase());
+      routeList.push(`${methods.join(',')} ${path}`);
+    } else if (middleware.name === 'router') {
+      // Router middleware
+      middleware.handle.stack.forEach((handler) => {
+        if (handler.route) {
+          const path = handler.route.path;
+          const methods = Object.keys(handler.route.methods).map(m => m.toUpperCase());
+          routeList.push(`${methods.join(',')} ${middleware.regexp} ${path}`);
+        }
+      });
+    }
+  });
+
+  console.log('\n🛣️  Available Routes:');
+  console.log('====================');
+  routeList.forEach(route => console.log(route));
+  console.log('====================\n');
+};
+
+// Call this after mounting all routes
+listRoutes();
 
 
 // 404 handler
