@@ -1,7 +1,11 @@
 const router = require('express').Router();
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
+const multer = require('multer');
 const { Project, User, Proposal } = require('../models/model');
+const { pinJson, pinFile } = require('../services/pinataService');
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Auth middleware for protected routes
 const authenticateUser = (req, res, next) => {
@@ -495,6 +499,309 @@ router.post('/:id/submit', authenticateUser, async (req, res) => {
   } catch (error) {
     console.error('Submit work error:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Pin deliverable JSON/content to Pinata and return CID
+router.post('/:id/proof/pin-deliverable', authenticateUser, async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.id)
+      .populate('client', 'name')
+      .populate('hiredFreelancer', 'name walletAddress');
+
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' });
+    }
+
+    const isAssignedFreelancer =
+      project.hiredFreelancer && project.hiredFreelancer._id.toString() === req.userId;
+    const isProjectClient = project.client && project.client._id.toString() === req.userId;
+    const isAdmin = req.userRole === 'admin';
+
+    if (!isAssignedFreelancer && !isProjectClient && !isAdmin) {
+      return res.status(403).json({ message: 'You are not authorized to pin deliverables for this project' });
+    }
+
+    const { deliverable, title, submissionType } = req.body;
+    if (!deliverable) {
+      return res.status(400).json({ message: 'deliverable is required' });
+    }
+
+    const payload = {
+      projectId: project._id.toString(),
+      projectTitle: project.title,
+      submissionType: submissionType || 'proof-deliverable',
+      submittedBy: req.userId,
+      submittedAt: new Date().toISOString(),
+      deliverable,
+    };
+
+    const pinName = `skillblock-deliverable-${project._id}-${Date.now()}`;
+    const pinned = await pinJson(payload, title || pinName);
+
+    res.json({
+      message: 'Deliverable pinned successfully',
+      cid: pinned.cid,
+      ipfsUri: pinned.ipfsUri,
+      gatewayUrl: pinned.gatewayUrl,
+    });
+  } catch (error) {
+    console.error('Pin deliverable error:', error);
+    res.status(500).json({ message: 'Failed to pin deliverable', error: error.message });
+  }
+});
+
+// Upload proof image to Pinata and return CID
+router.post('/:id/proof/pin-image', authenticateUser, upload.single('image'), async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.id)
+      .populate('client', 'name')
+      .populate('hiredFreelancer', 'name walletAddress');
+
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' });
+    }
+
+    const isAssignedFreelancer =
+      project.hiredFreelancer && project.hiredFreelancer._id.toString() === req.userId;
+    const isProjectClient = project.client && project.client._id.toString() === req.userId;
+    const isAdmin = req.userRole === 'admin';
+
+    if (!isAssignedFreelancer && !isProjectClient && !isAdmin) {
+      return res.status(403).json({ message: 'You are not authorized to upload proof images for this project' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'Image file is required' });
+    }
+
+    const pinned = await pinFile(req.file.buffer, req.file.originalname, req.file.mimetype);
+
+    res.json({
+      message: 'Proof image uploaded successfully',
+      cid: pinned.cid,
+      ipfsUri: pinned.ipfsUri,
+      gatewayUrl: pinned.gatewayUrl,
+      fileName: req.file.originalname,
+      mimeType: req.file.mimetype,
+    });
+  } catch (error) {
+    console.error('Pin image error:', error);
+    res.status(500).json({ message: 'Failed to upload proof image', error: error.message });
+  }
+});
+
+// Generate and pin proof-of-work NFT metadata to Pinata
+router.post('/:id/proof/prepare', authenticateUser, async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.id)
+      .populate('client', 'name')
+      .populate('hiredFreelancer', 'name walletAddress');
+
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' });
+    }
+
+    const isAssignedFreelancer =
+      project.hiredFreelancer && project.hiredFreelancer._id.toString() === req.userId;
+    const isProjectClient = project.client && project.client._id.toString() === req.userId;
+    const isAdmin = req.userRole === 'admin';
+
+    if (!isAssignedFreelancer && !isProjectClient && !isAdmin) {
+      return res.status(403).json({ message: 'You are not authorized to prepare proof for this project' });
+    }
+
+    const {
+      imageCid,
+      workDeliverableCid,
+      clientRating,
+      externalUrl,
+      category,
+      skillsUsed,
+      completionDate,
+      name,
+      description,
+    } = req.body;
+
+    if (!workDeliverableCid) {
+      return res.status(400).json({ message: 'workDeliverableCid is required' });
+    }
+
+    if (!imageCid) {
+      return res.status(400).json({ message: 'imageCid is required' });
+    }
+
+    const completionTimestamp = completionDate
+      ? Math.floor(new Date(completionDate).getTime() / 1000)
+      : Math.floor(Date.now() / 1000);
+
+    const normalizedSkills = Array.isArray(skillsUsed)
+      ? skillsUsed.join(', ')
+      : (skillsUsed || project.skills?.join(', ') || 'Not specified');
+
+    const ratingValue = typeof clientRating === 'number'
+      ? clientRating
+      : Number(clientRating || 0);
+
+    const metadata = {
+      name: name || `Proof of Work: ${project.title} #${project._id}`,
+      description:
+        description ||
+        `Verified completion of ${project.title} on SkillBlock.`,
+      image: `ipfs://${imageCid}`,
+      external_url: externalUrl || `https://skillblock.app/verify/${project._id}`,
+      attributes: [
+        {
+          trait_type: 'Category',
+          value: category || project.category || 'General',
+        },
+        {
+          trait_type: 'Skills Used',
+          value: normalizedSkills,
+        },
+        {
+          trait_type: 'Client Rating',
+          value: ratingValue,
+        },
+        {
+          trait_type: 'Completion Date',
+          display_type: 'date',
+          value: completionTimestamp,
+        },
+        {
+          trait_type: 'Work Deliverable CID',
+          value: workDeliverableCid,
+        },
+      ],
+    };
+
+    const pinName = `skillblock-proof-${project._id}`;
+    const pinned = await pinJson(metadata, pinName);
+
+    const updatedProject = await Project.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: {
+          'proofOfWork.metadataCid': pinned.cid,
+          'proofOfWork.metadataUri': pinned.ipfsUri,
+          'proofOfWork.metadataGatewayUrl': pinned.gatewayUrl,
+          'proofOfWork.workDeliverableCid': workDeliverableCid,
+          'proofOfWork.imageCid': imageCid,
+          'proofOfWork.clientRating': ratingValue,
+        },
+        $push: {
+          submissions: {
+            deliverables: workDeliverableCid,
+            comments: 'Proof prepared and metadata pinned to IPFS',
+            workDeliverableCid,
+            metadataCid: pinned.cid,
+            metadataUri: pinned.ipfsUri,
+            submittedAt: Date.now(),
+          },
+        },
+        $setOnInsert: {
+          updatedAt: Date.now(),
+        },
+      },
+      { new: true }
+    );
+
+    res.json({
+      message: 'Proof metadata pinned successfully',
+      metadata,
+      proof: {
+        metadataCid: pinned.cid,
+        metadataUri: pinned.ipfsUri,
+        metadataGatewayUrl: pinned.gatewayUrl,
+        workDeliverableCid,
+        imageCid,
+      },
+      project: updatedProject,
+    });
+  } catch (error) {
+    console.error('Prepare proof error:', error);
+    res.status(500).json({ message: 'Failed to prepare proof metadata', error: error.message });
+  }
+});
+
+// Record minted NFT details after on-chain transaction
+router.put('/:id/proof/mint-record', authenticateUser, async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.id);
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' });
+    }
+
+    const isAssignedFreelancer =
+      project.hiredFreelancer && project.hiredFreelancer.toString() === req.userId;
+    const isProjectClient = project.client && project.client.toString() === req.userId;
+    const isAdmin = req.userRole === 'admin';
+
+    if (!isAssignedFreelancer && !isProjectClient && !isAdmin) {
+      return res.status(403).json({ message: 'You are not authorized to record mint data for this project' });
+    }
+
+    const { tokenId, txHash, nftContractAddress, mintedAt } = req.body;
+
+    if (!tokenId || !txHash || !nftContractAddress) {
+      return res.status(400).json({ message: 'tokenId, txHash, and nftContractAddress are required' });
+    }
+
+    const updatedProject = await Project.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: {
+          'proofOfWork.nftTokenId': String(tokenId),
+          'proofOfWork.nftMintTxHash': txHash,
+          'proofOfWork.nftContractAddress': nftContractAddress,
+          'proofOfWork.mintedAt': mintedAt ? new Date(mintedAt) : new Date(),
+          'proofOfWork.mintedBy': req.userId,
+          updatedAt: Date.now(),
+        },
+      },
+      { new: true }
+    )
+      .populate('client', 'name email walletAddress')
+      .populate('hiredFreelancer', 'name email walletAddress')
+      .populate('proofOfWork.mintedBy', 'name email walletAddress');
+
+    res.json({
+      message: 'Mint record saved successfully',
+      proofOfWork: updatedProject.proofOfWork,
+      project: updatedProject,
+    });
+  } catch (error) {
+    console.error('Mint record error:', error);
+    res.status(500).json({ message: 'Failed to record mint data', error: error.message });
+  }
+});
+
+// Get proof-of-work details for a project
+router.get('/:id/proof', authenticateUser, async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.id)
+      .select('title status category skills proofOfWork client hiredFreelancer')
+      .populate('client', 'name email walletAddress')
+      .populate('hiredFreelancer', 'name email walletAddress')
+      .populate('proofOfWork.mintedBy', 'name email walletAddress');
+
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' });
+    }
+
+    res.json({
+      projectId: project._id,
+      title: project.title,
+      status: project.status,
+      proofOfWork: project.proofOfWork || null,
+      participants: {
+        client: project.client,
+        freelancer: project.hiredFreelancer,
+      },
+    });
+  } catch (error) {
+    console.error('Get proof error:', error);
+    res.status(500).json({ message: 'Failed to fetch proof data', error: error.message });
   }
 });
 

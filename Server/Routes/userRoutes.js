@@ -72,6 +72,7 @@ router.post('/wallet-register', async (req, res) => {
 
     // Normalize wallet address
     walletAddress = walletAddress.toLowerCase().trim();
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
 
     // Check if wallet already registered
     let user = await User.findOne({ walletAddress });
@@ -83,14 +84,18 @@ router.post('/wallet-register', async (req, res) => {
     }
 
     // Create new user with wallet
-    user = new User({
+    const userData = {
       name: name || 'Wallet User',
-      email: email || '',
       walletAddress,
-      walletProvider: 'metamask',
       role: role || 'client',
       createdAt: Date.now()
-    });
+    };
+
+    if (normalizedEmail) {
+      userData.email = normalizedEmail;
+    }
+
+    user = new User(userData);
 
     await user.save();
 
@@ -120,6 +125,15 @@ router.post('/wallet-register', async (req, res) => {
     console.log('User registered successfully:', user.walletAddress);
   } catch (error) {
     console.error('Wallet registration error:', error);
+
+    if (error?.code === 11000) {
+      const duplicateField = Object.keys(error.keyValue || {})[0] || 'account';
+      return res.status(400).json({
+        success: false,
+        message: `${duplicateField} already exists`,
+      });
+    }
+
     res.status(500).json({ 
       success: false,
       message: 'Server error during registration'

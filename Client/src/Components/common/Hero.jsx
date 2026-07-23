@@ -11,6 +11,18 @@ const Hero = () => {
   const navigate = useNavigate();
   const userRole = localStorage.getItem('userRole');
 
+  const getInjectedProvider = () => {
+    if (!window.ethereum) return null;
+    if (Array.isArray(window.ethereum.providers) && window.ethereum.providers.length) {
+      return (
+        window.ethereum.providers.find((p) => p.isMetaMask) ||
+        window.ethereum.providers.find((p) => typeof p.request === 'function') ||
+        window.ethereum
+      );
+    }
+    return window.ethereum;
+  };
+
   useEffect(() => {
     checkWalletConnection();
     if (window.ethereum) {
@@ -41,8 +53,9 @@ const Hero = () => {
 
   const checkWalletConnection = async () => {
     try {
-      if (window.ethereum) {
-        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+      const provider = getInjectedProvider();
+      if (provider) {
+        const accounts = await provider.request({ method: 'eth_accounts' });
         setIsWalletConnected(accounts.length > 0);
         if (accounts.length > 0) {
           localStorage.setItem('walletAddress', accounts[0]);
@@ -55,7 +68,8 @@ const Hero = () => {
   };
 
   const connectWallet = async () => {
-    if (!window.ethereum) {
+    const provider = getInjectedProvider();
+    if (!provider) {
       alert("Please install MetaMask to continue!");
       window.open('https://metamask.io/download/', '_blank');
       return;
@@ -63,7 +77,7 @@ const Hero = () => {
 
     try {
       setIsConnecting(true);
-      const accounts = await window.ethereum.request({ 
+      const accounts = await provider.request({ 
         method: 'eth_requestAccounts' 
       });
       
@@ -74,7 +88,13 @@ const Hero = () => {
       }
     } catch (error) {
       console.error('Error connecting wallet:', error);
-      alert('Failed to connect wallet. Please try again.');
+      if (error?.code === 4001) {
+        alert('Wallet connection request was cancelled.');
+      } else if (error?.code === -32002) {
+        alert('A wallet connection request is already pending. Open your wallet extension and complete it.');
+      } else {
+        alert('Failed to connect wallet. Please try again.');
+      }
     } finally {
       setIsConnecting(false);
     }
@@ -257,7 +277,7 @@ const Hero = () => {
       )}
       
       {/* Add custom CSS for animations */}
-      <style jsx>{`
+      <style>{`
         @keyframes blob {
           0% { transform: scale(1); }
           33% { transform: scale(1.1); }

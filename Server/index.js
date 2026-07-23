@@ -39,11 +39,12 @@ app.use((req, res, next) => {
 
 // MongoDB Connection with retry logic
 const connectDB = async (retries = 5) => {
+  const rawUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/skillorbit';
+  const mongoUri = rawUri.trim();
+
   while (retries) {
     try {
-      await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/skillorbit', {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
+      await mongoose.connect(mongoUri, {
         serverSelectionTimeoutMS: 5000,
         socketTimeoutMS: 45000,
       });

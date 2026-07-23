@@ -10,16 +10,32 @@ class FreelancePlatformContract {
     this.provider = null;
   }
 
+  getInjectedProvider() {
+    if (!window.ethereum) return null;
+
+    if (Array.isArray(window.ethereum.providers) && window.ethereum.providers.length) {
+      return (
+        window.ethereum.providers.find((p) => p.isMetaMask) ||
+        window.ethereum.providers.find((p) => typeof p.request === 'function') ||
+        window.ethereum
+      );
+    }
+
+    return window.ethereum;
+  }
+
   // Initialize the contract connection
   async init() {
     try {
-      // Check if MetaMask is installed
-      if (window.ethereum) {
+      const injectedProvider = this.getInjectedProvider();
+
+      // Check if MetaMask (or another EIP-1193 wallet) is installed
+      if (injectedProvider) {
         // Create provider and connect to MetaMask
-        this.provider = new ethers.BrowserProvider(window.ethereum);
+        this.provider = new ethers.BrowserProvider(injectedProvider);
         
         // Request account access
-        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        await injectedProvider.request({ method: 'eth_requestAccounts' });
         
         // Get the signer
         this.signer = await this.provider.getSigner();

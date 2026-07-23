@@ -102,6 +102,48 @@ export const ProjectDetailsModal = ({ project, onClose, showNotification }) => {
                   }
                 </div>
               </div>
+
+              {project.proofOfWork && (
+                <div className="border border-blue-500/30 bg-blue-950/20 rounded-lg p-4 space-y-4">
+                  <h4 className="text-lg font-medium text-white">Proof of Work NFT</h4>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-400 mb-1">Metadata CID</p>
+                      <p className="text-blue-300 break-all">{project.proofOfWork.metadataCid || 'Not minted yet'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 mb-1">Work Deliverable CID</p>
+                      <p className="text-blue-300 break-all">{project.proofOfWork.workDeliverableCid || 'Not available'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 mb-1">NFT Token ID</p>
+                      <p className="text-white">{project.proofOfWork.nftTokenId || 'Pending mint'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 mb-1">Mint Tx Hash</p>
+                      <p className="text-white break-all">{project.proofOfWork.nftMintTxHash || 'Pending mint'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 mb-1">Metadata URI</p>
+                      <a
+                        href={project.proofOfWork.metadataGatewayUrl || project.proofOfWork.metadataUri}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-blue-300 break-all hover:underline"
+                      >
+                        {project.proofOfWork.metadataUri || 'Not available'}
+                      </a>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 mb-1">Minted At</p>
+                      <p className="text-white">
+                        {project.proofOfWork.mintedAt ? new Date(project.proofOfWork.mintedAt).toLocaleString() : 'Pending mint'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <ProposalList 

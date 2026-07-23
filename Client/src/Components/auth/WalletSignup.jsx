@@ -105,12 +105,17 @@ const WalletSignup = () => {
       }
   
       // Wallet not registered - proceed with registration
-      const registerResponse = await axios.post(`${API_URL}/users/wallet-register`, {
+      const registrationPayload = {
         walletAddress,
         name,
-        email,
         role: userRole
-      });
+      };
+
+      if (email.trim()) {
+        registrationPayload.email = email.trim();
+      }
+
+      const registerResponse = await axios.post(`${API_URL}/users/wallet-register`, registrationPayload);
   
       console.log('Registration response:', registerResponse.data);
   

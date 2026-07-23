@@ -142,9 +142,81 @@ const ProjectSchema = new Schema({
     type: { type: String },
     size: { type: Number }
   }],
+  submissions: [{
+    deliverables: {
+      type: String,
+      trim: true
+    },
+    comments: {
+      type: String,
+      trim: true
+    },
+    workDeliverableCid: {
+      type: String,
+      trim: true
+    },
+    metadataCid: {
+      type: String,
+      trim: true
+    },
+    metadataUri: {
+      type: String,
+      trim: true
+    },
+    submittedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   contractAddress: {
     type: String,
     trim: true
+  },
+  proofOfWork: {
+    metadataCid: {
+      type: String,
+      trim: true
+    },
+    metadataUri: {
+      type: String,
+      trim: true
+    },
+    metadataGatewayUrl: {
+      type: String,
+      trim: true
+    },
+    workDeliverableCid: {
+      type: String,
+      trim: true
+    },
+    imageCid: {
+      type: String,
+      trim: true
+    },
+    nftContractAddress: {
+      type: String,
+      trim: true
+    },
+    nftTokenId: {
+      type: String,
+      trim: true
+    },
+    nftMintTxHash: {
+      type: String,
+      trim: true
+    },
+    mintedAt: {
+      type: Date
+    },
+    mintedBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    clientRating: {
+      type: Number,
+      min: 0,
+      max: 5
+    }
   },
   escrowAmount: {
     type: Number,

@@ -17,6 +17,18 @@ const Navbar = () => {
 
   const [blockchainConnected, setBlockchainConnected] = useState(false);
 const [blockchainNetwork, setBlockchainNetwork] = useState('');
+
+  const getInjectedProvider = () => {
+    if (!window.ethereum) return null;
+    if (Array.isArray(window.ethereum.providers) && window.ethereum.providers.length) {
+      return (
+        window.ethereum.providers.find((p) => p.isMetaMask) ||
+        window.ethereum.providers.find((p) => typeof p.request === 'function') ||
+        window.ethereum
+      );
+    }
+    return window.ethereum;
+  };
   
   useEffect(() => {
     const handleScroll = () => {
@@ -88,14 +100,15 @@ const [blockchainNetwork, setBlockchainNetwork] = useState('');
       }
       
       const { ethereum } = window;
-      
-      if (!ethereum) {
+      const provider = getInjectedProvider();
+
+      if (!provider) {
         console.log("Make sure you have MetaMask installed!");
         return;
       }
       
       // Check if we're authorized to access the user's wallet
-      const accounts = await ethereum.request({ method: "eth_accounts" });
+      const accounts = await provider.request({ method: "eth_accounts" });
       
       if (accounts.length !== 0) {
         const account = accounts[0];
@@ -119,9 +132,9 @@ const [blockchainNetwork, setBlockchainNetwork] = useState('');
   const connectWallet = async () => {
     try {
       setIsConnecting(true);
-      const { ethereum } = window;
+      const provider = getInjectedProvider();
       
-      if (!ethereum) {
+      if (!provider) {
         alert("Get MetaMask to connect your wallet!");
         window.open("https://metamask.io/download/", "_blank");
         setIsConnecting(false);
@@ -132,7 +145,7 @@ const [blockchainNetwork, setBlockchainNetwork] = useState('');
       localStorage.removeItem('walletDisconnected');
       
       // Request account access
-      const accounts = await ethereum.request({ method: "eth_requestAccounts" });
+      const accounts = await provider.request({ method: "eth_requestAccounts" });
       const walletAddress = accounts[0];
       
       console.log("Connected to wallet: ", walletAddress);
@@ -151,6 +164,11 @@ const [blockchainNetwork, setBlockchainNetwork] = useState('');
       setIsConnecting(false);
     } catch (error) {
       console.error(error);
+      if (error?.code === 4001) {
+        alert('Wallet connection request was cancelled.');
+      } else if (error?.code === -32002) {
+        alert('A wallet connection request is already pending. Open your wallet extension and complete it.');
+      }
       setIsConnecting(false);
     }
   };
